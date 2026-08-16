@@ -25,28 +25,36 @@ type Titik = {
 
 const LOKASI = { lat: -7.713542, lng: 110.440141 }
 
+// Acuan umum kondisi ideal melon hidroponik/greenhouse -- sifatnya indikatif,
+// sesuaikan lagi dengan varietas dan SOP budidaya Anda sendiri.
 const METRIK = [
-  { key: 'suhu_air',   label: 'Suhu air',   satuan: '°C',  desimal: 1, warna: '#0e7490', bg: '#ecfeff', border: '#a5f3fc' },
-  { key: 'ph',         label: 'pH',         satuan: '',    desimal: 2, warna: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
-  { key: 'tds',        label: 'TDS',        satuan: 'ppm', desimal: 0, warna: '#0f766e', bg: '#f0fdfa', border: '#99f6e4' },
-  { key: 'jarak',      label: 'Ketinggian', satuan: 'cm',  desimal: 1, warna: '#2563eb', bg: '#eff6ff', border: '#bfdbfe' },
-  { key: 'suhu_udara', label: 'Suhu udara', satuan: '°C',  desimal: 1, warna: '#c2410c', bg: '#fff7ed', border: '#fed7aa' },
-  { key: 'hum_udara',  label: 'Kelembaban', satuan: '%',   desimal: 1, warna: '#15803d', bg: '#f0fdf4', border: '#bbf7d0' },
-  { key: 'lux',        label: 'Cahaya',     satuan: 'lux', desimal: 0, warna: '#a16207', bg: '#fefce8', border: '#fde68a' },
+  { key: 'suhu_air',   label: 'Suhu Air',    satuan: '°C',  desimal: 1, warna: '#0e7490', ideal: [20, 28] },
+  { key: 'ph',         label: 'pH',          satuan: '',    desimal: 2, warna: '#7c3aed', ideal: [5.8, 6.8] },
+  { key: 'tds',        label: 'TDS',         satuan: 'ppm', desimal: 0, warna: '#0f766e', ideal: [400, 1200] },
+  { key: 'jarak',      label: 'Ketinggian',  satuan: 'cm',  desimal: 1, warna: '#2563eb', ideal: null },
+  { key: 'suhu_udara', label: 'Suhu Udara',  satuan: '°C',  desimal: 1, warna: '#c2410c', ideal: [24, 32] },
+  { key: 'hum_udara',  label: 'Kelembaban',  satuan: '%',   desimal: 1, warna: '#15803d', ideal: [50, 80] },
+  { key: 'lux',        label: 'Cahaya',      satuan: 'lux', desimal: 0, warna: '#a16207', ideal: null },
 ] as const
 
 const RENTANG = [
-  { key: '24h', label: '24 jam terakhir', jamMundur: 24,        bucketMenit: 1 },
-  { key: '7d',  label: '7 hari terakhir', jamMundur: 24 * 7,    bucketMenit: 60 },
-  { key: '30d', label: '30 hari terakhir', jamMundur: 24 * 30,  bucketMenit: 240 },
-  { key: '1y',  label: '1 tahun terakhir', jamMundur: 24 * 365, bucketMenit: 1440 },
+  { key: '24h', label: '24 jam', jamMundur: 24,        bucketMenit: 1 },
+  { key: '7d',  label: '7 hari', jamMundur: 24 * 7,    bucketMenit: 60 },
+  { key: '30d', label: '30 hari', jamMundur: 24 * 30,  bucketMenit: 240 },
+  { key: '1y',  label: '1 tahun', jamMundur: 24 * 365, bucketMenit: 1440 },
 ] as const
+
+function statusMetrik(key: string, nilai: number | null | undefined) {
+  const m = METRIK.find((x) => x.key === key)!
+  if (nilai == null || !m.ideal) return { label: 'Normal', warna: '#6b7280', bg: '#f3f4f6' }
+  const [lo, hi] = m.ideal
+  if (nilai < lo || nilai > hi) return { label: 'Perlu Cek', warna: '#b45309', bg: '#fef3c7' }
+  return { label: 'Optimal', warna: '#15803d', bg: '#dcfce7' }
+}
 
 function formatSumbu(iso: string, rentangKey: string) {
   const d = new Date(iso)
-  if (rentangKey === '24h') {
-    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-  }
+  if (rentangKey === '24h') return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
   return d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })
 }
 
@@ -61,16 +69,15 @@ export default function Dashboard() {
   const [waktuTerbaru, setWaktuTerbaru] = useState<string | null>(null)
 
   const rentangAktif = RENTANG.find((r) => r.key === rentang)!
+  const aktif = METRIK.find((m) => m.key === grafik)!
 
   async function muatGrafik() {
     const start = new Date(Date.now() - rentangAktif.jamMundur * 3600 * 1000).toISOString()
-
     const { data, error } = await supabase.rpc('readings_bucketed', {
       p_device_id: 'esp32-01',
       p_start: start,
       p_bucket_minutes: rentangAktif.bucketMenit,
     })
-
     if (error) { setError(error.message); return }
     setError(null)
     setData(data ?? [])
@@ -84,7 +91,6 @@ export default function Dashboard() {
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-
     if (error || !data) return
     setTerbaru(data)
     setWaktuTerbaru(data.created_at)
@@ -108,31 +114,50 @@ export default function Dashboard() {
     }
   }
 
-  useEffect(() => {
-    muatGrafik()
-  }, [rentang])
-
+  useEffect(() => { muatGrafik() }, [rentang])
   useEffect(() => {
     muatTerbaru()
     const t = setInterval(() => { muatTerbaru(); muatGrafik() }, 30000)
     return () => clearInterval(t)
   }, [])
 
-  const aktif = METRIK.find((m) => m.key === grafik)!
   const jamLabel = (iso: string) => formatSumbu(iso, rentang)
+  const hero = ['suhu_air', 'ph', 'tds'].map((k) => METRIK.find((m) => m.key === k)!)
 
   return (
-    <main style={{ maxWidth: 960, margin: '0 auto', padding: '1.5rem', fontFamily: 'sans-serif' }}>
-      <header style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: '1.5rem', flexWrap: 'wrap', gap: 8 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, color: '#14532d', margin: 0 }}>
-          🌿 SmartSense Monitoring Greenhouse v.01
-        </h1>
-        <span style={{ fontSize: 13, color: '#78716c' }}>
+    <main style={{ maxWidth: 1080, margin: '0 auto', padding: '1.25rem', fontFamily: 'sans-serif', background: '#f4f6f2' }}>
+
+      {/* HERO */}
+      <section style={{
+        borderRadius: 24, padding: '2rem', marginBottom: '1.25rem',
+        background: 'linear-gradient(135deg, #14532d, #15803d 60%, #4d7c0f)',
+        color: '#fff', position: 'relative', overflow: 'hidden',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, fontSize: 15, fontWeight: 600, opacity: 0.9 }}>
+          🍈 SmartSense Greenhouse Melon
+        </div>
+        <h1 style={{ fontSize: 34, fontWeight: 700, margin: '4px 0 24px' }}>Overview</h1>
+        <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>
+          {hero.map((m) => {
+            const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
+            return (
+              <div key={m.key}>
+                <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2 }}>{m.label}</div>
+                <div style={{ fontSize: 26, fontWeight: 700 }}>
+                  {nilai == null ? '—' : nilai.toFixed(m.desimal)}
+                  <span style={{ fontSize: 15, fontWeight: 400, opacity: 0.8 }}> {m.satuan}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+        <div style={{ position: 'absolute', right: -20, top: -20, fontSize: 140, opacity: 0.12 }}>🍈</div>
+        <div style={{ marginTop: 20, fontSize: 12, opacity: 0.8 }}>
           {waktuTerbaru
             ? `Data terakhir ${new Date(waktuTerbaru).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
             : 'Menunggu data dari perangkat'}
-        </span>
-      </header>
+        </div>
+      </section>
 
       {error && (
         <p style={{ marginBottom: 16, borderRadius: 8, border: '1px solid #fca5a5', background: '#fef2f2', padding: 12, fontSize: 14, color: '#991b1b' }}>
@@ -140,123 +165,137 @@ export default function Dashboard() {
         </p>
       )}
 
-      {/* Kartu rekomendasi AI */}
-      <section style={{
-        marginBottom: '1.5rem', borderRadius: 16, padding: '1.25rem 1.5rem',
-        background: 'linear-gradient(135deg, #ecfdf5, #f0fdfa)', border: '1px solid #a7f3d0',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-          <span style={{ fontSize: 18 }}>🤖</span>
-          <span style={{ fontSize: 14, fontWeight: 600, color: '#065f46' }}>Rekomendasi AI</span>
-        </div>
-        <div style={{ fontSize: 14, color: '#134e4a', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
-          {loadingRekomendasi ? 'Menganalisis data sensor...' : (rekomendasi || 'Menunggu data pertama...')}
-        </div>
-      </section>
+      {/* GRID: chart + alert */}
+      <section style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: 16, marginBottom: 16 }}>
 
-      {/* Kartu nilai terbaru */}
-      <section style={{
-        marginBottom: '1.5rem', display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12,
-      }}>
-        {METRIK.map((m) => {
-          const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
-          const dipilih = grafik === m.key
-          return (
-            <button
-              key={m.key}
-              onClick={() => setGrafik(m.key)}
-              style={{
-                textAlign: 'left', borderRadius: 12, padding: '1rem', cursor: 'pointer',
-                border: `2px solid ${dipilih ? m.warna : m.border}`,
-                background: m.bg,
-                transform: dipilih ? 'scale(1.03)' : 'scale(1)',
-                transition: 'transform 0.15s',
-              }}
-            >
-              <div style={{ fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5, color: m.warna, fontWeight: 600, opacity: 0.75 }}>
-                {m.label}
-              </div>
-              <div style={{ marginTop: 4, fontSize: 24, fontWeight: 700, color: m.warna }}>
-                {nilai == null ? '—' : nilai.toFixed(m.desimal)}
-                <span style={{ marginLeft: 4, fontSize: 13, fontWeight: 400, opacity: 0.7 }}>{m.satuan}</span>
-              </div>
-            </button>
-          )
-        })}
-      </section>
+        {/* Growth analytics (dark card) */}
+        <div style={{ borderRadius: 20, padding: '1.25rem 1.5rem', background: '#14532d', color: '#fff' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 15, fontWeight: 600 }}>Growth Analytics</span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              {RENTANG.map((r) => (
+                <button
+                  key={r.key}
+                  onClick={() => setRentang(r.key)}
+                  style={{
+                    fontSize: 11, padding: '3px 9px', borderRadius: 999, cursor: 'pointer', border: 'none',
+                    background: rentang === r.key ? '#fff' : 'rgba(255,255,255,0.15)',
+                    color: rentang === r.key ? '#14532d' : '#fff',
+                    fontWeight: rentang === r.key ? 700 : 400,
+                  }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-      {/* Grafik metrik terpilih */}
-      <section style={{ borderRadius: 16, border: `1px solid ${aktif.border}`, padding: '1rem 1.25rem', marginBottom: '1.5rem', background: '#fff' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: aktif.warna, margin: 0 }}>
-            {aktif.label} — {rentangAktif.label}
-          </h2>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {RENTANG.map((r) => (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0 6px' }}>
+            {METRIK.map((m) => (
               <button
-                key={r.key}
-                onClick={() => setRentang(r.key)}
+                key={m.key}
+                onClick={() => setGrafik(m.key)}
                 style={{
-                  fontSize: 12, padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
-                  border: `1px solid ${rentang === r.key ? aktif.warna : '#e5e5e0'}`,
-                  background: rentang === r.key ? aktif.warna : '#fff',
-                  color: rentang === r.key ? '#fff' : '#666',
+                  fontSize: 11, padding: '3px 10px', borderRadius: 999, cursor: 'pointer',
+                  border: `1px solid ${grafik === m.key ? '#fff' : 'rgba(255,255,255,0.3)'}`,
+                  background: grafik === m.key ? 'rgba(255,255,255,0.15)' : 'transparent',
+                  color: '#fff',
                 }}
               >
-                {r.label.replace(' terakhir', '')}
+                {m.label}
               </button>
             ))}
           </div>
+
+          <div style={{ height: 210, marginTop: 8 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                <CartesianGrid stroke="rgba(255,255,255,0.1)" vertical={false} />
+                <XAxis dataKey="bucket" tickFormatter={jamLabel} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} minTickGap={40} />
+                <YAxis tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} domain={['auto', 'auto']} />
+                <Tooltip
+                  labelFormatter={(v) => jamLabel(v as string)}
+                  formatter={(v: number) => [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, aktif.label]}
+                  contentStyle={{ background: '#0f3d20', border: 'none', borderRadius: 8, fontSize: 12 }}
+                />
+                <Line type="monotone" dataKey={grafik} stroke="#a3e635" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          {data.length === 0 && (
+            <p style={{ fontSize: 12, opacity: 0.6, textAlign: 'center', marginTop: 8 }}>Belum ada data untuk rentang ini.</p>
+          )}
         </div>
-        <div style={{ height: 260 }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 4, right: 8, bottom: 4, left: -16 }}>
-              <CartesianGrid stroke="#eee" vertical={false} />
-              <XAxis dataKey="bucket" tickFormatter={jamLabel} tick={{ fontSize: 12 }} minTickGap={40} />
-              <YAxis tick={{ fontSize: 12 }} domain={['auto', 'auto']} />
-              <Tooltip
-                labelFormatter={(v) => jamLabel(v as string)}
-                formatter={(v: number) => [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, aktif.label]}
-              />
-              <Line
-                type="monotone"
-                dataKey={grafik}
-                stroke={aktif.warna}
-                strokeWidth={2.5}
-                dot={false}
-                connectNulls
-                isAnimationActive={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+
+        {/* Rekomendasi AI (styled as Critical Alerts) */}
+        <div style={{ borderRadius: 20, padding: '1.25rem 1.5rem', background: '#fef9c3', border: '1px solid #fde68a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: '#78350f' }}>🤖 Rekomendasi AI</span>
+          </div>
+          <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+            {loadingRekomendasi ? 'Menganalisis data sensor...' : (rekomendasi || 'Menunggu data pertama...')}
+          </div>
         </div>
-        {data.length === 0 && (
-          <p style={{ fontSize: 13, color: '#a3a39c', textAlign: 'center', marginTop: 12 }}>
-            Belum ada data untuk rentang ini.
-          </p>
-        )}
       </section>
 
-      {/* Peta lokasi greenhouse */}
-      <section style={{ borderRadius: 16, border: '1px solid #d9d9d3', overflow: 'hidden', background: '#fff' }}>
-        <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid #eee' }}>
-          <h2 style={{ fontSize: 14, fontWeight: 600, color: '#44443f', margin: 0 }}>📍 Lokasi greenhouse</h2>
+      {/* Tabel status semua metrik */}
+      <section style={{ borderRadius: 20, background: '#fff', border: '1px solid #e5e7eb', overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #f0f0ee', fontSize: 15, fontWeight: 600, color: '#14532d' }}>
+          Status Sensor Saat Ini
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <thead>
+            <tr style={{ color: '#9ca3af', textAlign: 'left' }}>
+              <th style={{ padding: '10px 1.5rem', fontWeight: 500 }}>Sensor</th>
+              <th style={{ padding: '10px 12px', fontWeight: 500 }}>Nilai</th>
+              <th style={{ padding: '10px 1.5rem', fontWeight: 500 }}>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {METRIK.map((m) => {
+              const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
+              const st = statusMetrik(m.key, nilai)
+              return (
+                <tr key={m.key} style={{ borderTop: '1px solid #f4f4f2' }}>
+                  <td style={{ padding: '10px 1.5rem', fontWeight: 600, color: '#374151' }}>
+                    <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 999, background: m.warna, marginRight: 8 }} />
+                    {m.label}
+                  </td>
+                  <td style={{ padding: '10px 12px', color: '#111827' }}>
+                    {nilai == null ? '—' : nilai.toFixed(m.desimal)} {m.satuan}
+                  </td>
+                  <td style={{ padding: '10px 1.5rem' }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, color: st.warna, background: st.bg }}>
+                      {st.label}
+                    </span>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+        <p style={{ fontSize: 11, color: '#9ca3af', padding: '10px 1.5rem' }}>
+          Rentang "Optimal" bersifat acuan umum untuk melon hidroponik, sesuaikan dengan SOP budidaya Anda sendiri.
+        </p>
+      </section>
+
+      {/* Peta lokasi */}
+      <section style={{ borderRadius: 20, border: '1px solid #e5e7eb', overflow: 'hidden', background: '#fff' }}>
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #f0f0ee', fontSize: 15, fontWeight: 600, color: '#14532d' }}>
+          📍 Lokasi Greenhouse
         </div>
         <iframe
           title="Lokasi greenhouse"
           width="100%"
-          height="320"
+          height="300"
           style={{ border: 0, display: 'block' }}
           loading="lazy"
           src={`https://www.openstreetmap.org/export/embed.html?bbox=${LOKASI.lng - 0.01}%2C${LOKASI.lat - 0.008}%2C${LOKASI.lng + 0.01}%2C${LOKASI.lat + 0.008}&layer=mapnik&marker=${LOKASI.lat}%2C${LOKASI.lng}`}
         />
-        <div style={{ padding: '0.75rem 1.25rem', fontSize: 13 }}>
-          <a
+        <div style={{ padding: '0.75rem 1.5rem', fontSize: 13 }}>
+          
             href={`https://www.openstreetmap.org/?mlat=${LOKASI.lat}&mlon=${LOKASI.lng}#map=17/${LOKASI.lat}/${LOKASI.lng}`}
-            target="_blank"
-            rel="noreferrer"
-            style={{ color: '#2563eb' }}
+            target="_blank" rel="noreferrer" style={{ color: '#15803d' }}
           >
             Buka peta lebih besar
           </a>
