@@ -36,7 +36,7 @@ const METRIK = [
 ] as const
 
 const RENTANG = [
-  { key: '24h', label: '24 jam terakhir', jamMundur: 24,        bucketMenit: 5 },
+  { key: '24h', label: '24 jam terakhir', jamMundur: 24,        bucketMenit: 1 },
   { key: '7d',  label: '7 hari terakhir', jamMundur: 24 * 7,    bucketMenit: 60 },
   { key: '30d', label: '30 hari terakhir', jamMundur: 24 * 30,  bucketMenit: 240 },
   { key: '1y',  label: '1 tahun terakhir', jamMundur: 24 * 365, bucketMenit: 1440 },
