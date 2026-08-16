@@ -293,7 +293,7 @@ export default function Dashboard() {
           src={`https://www.openstreetmap.org/export/embed.html?bbox=${LOKASI.lng - 0.01}%2C${LOKASI.lat - 0.008}%2C${LOKASI.lng + 0.01}%2C${LOKASI.lat + 0.008}&layer=mapnik&marker=${LOKASI.lat}%2C${LOKASI.lng}`}
         />
         <div style={{ padding: '0.75rem 1.5rem', fontSize: 13 }}>
-          
+          <a
             href={`https://www.openstreetmap.org/?mlat=${LOKASI.lat}&mlon=${LOKASI.lng}#map=17/${LOKASI.lat}/${LOKASI.lng}`}
             target="_blank" rel="noreferrer" style={{ color: '#15803d' }}
           >
