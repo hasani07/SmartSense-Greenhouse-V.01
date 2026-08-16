@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'SmartSense Monitoring Greenhouse v.01',
-  description: 'Dashboard monitoring sensor kualitas air dan lingkungan greenhouse real-time',
+  title: 'SmartSense Greenhouse Melon',
+  description: ''Dashboard monitoring sensor greenhouse melon real-time',
 }
 
 export default function RootLayout({
