@@ -8,7 +8,7 @@ import {
 } from 'recharts'
 import {
   Sprout, Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
-  MapPin, Sparkles, ExternalLink,
+  MapPin, Sparkles, ExternalLink, Wifi, WifiOff, AlertTriangle, Download,
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -77,6 +77,7 @@ export default function Dashboard() {
   const [terbaru, setTerbaru] = useState<Titik | null>(null)
   const [waktuTerbaru, setWaktuTerbaru] = useState<string | null>(null)
   const [dark, setDark] = useState(false)
+  const [uptime, setUptime] = useState<number | null>(null)
 
   useEffect(() => {
     const saved = localStorage.getItem('dashboard-dark')
@@ -92,6 +93,56 @@ export default function Dashboard() {
 
   const rentangAktif = RENTANG.find((r) => r.key === rentang)!
   const aktif = METRIK.find((m) => m.key === grafik)!
+
+  async function muatUptime() {
+    const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+    const { count, error } = await supabase
+      .from('readings')
+      .select('id', { count: 'exact', head: true })
+      .eq('device_id', 'esp32-01')
+      .gte('created_at', since)
+    if (error || count == null) return
+    const perkiraanTotal = 24 * 60 // asumsi kirim tiap 1 menit
+    setUptime(Math.min(100, Math.round((count / perkiraanTotal) * 100)))
+  }
+
+  const [mengekspor, setMengekspor] = useState(false)
+  async function eksporCSV() {
+    setMengekspor(true)
+    try {
+      const start = new Date(Date.now() - rentangAktif.jamMundur * 3600 * 1000).toISOString()
+      const { data, error } = await supabase
+        .from('readings')
+        .select('created_at, suhu_air, ph, tds, jarak, suhu_udara, hum_udara, lux')
+        .eq('device_id', 'esp32-01')
+        .gte('created_at', start)
+        .order('created_at', { ascending: true })
+        .limit(5000)
+
+      if (error || !data || data.length === 0) {
+        alert('Tidak ada data untuk diekspor pada rentang ini.')
+        return
+      }
+
+      const header = 'Waktu,Suhu Air (C),pH,TDS (ppm),Ketinggian (cm),Suhu Udara (C),Kelembaban (%),Cahaya (lux)\n'
+      const baris = data.map((r) => [
+        new Date(r.created_at).toLocaleString('id-ID'),
+        r.suhu_air ?? '', r.ph ?? '', r.tds ?? '', r.jarak ?? '', r.suhu_udara ?? '', r.hum_udara ?? '', r.lux ?? '',
+      ].join(',')).join('\n')
+
+      const blob = new Blob([header + baris], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `smartsense-greenhouse-${rentang}-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } finally {
+      setMengekspor(false)
+    }
+  }
 
   async function muatGrafik() {
     const start = new Date(Date.now() - rentangAktif.jamMundur * 3600 * 1000).toISOString()
@@ -149,12 +200,16 @@ export default function Dashboard() {
   useEffect(() => { muatGrafik(); muatStats() }, [rentang])
   useEffect(() => {
     muatTerbaru()
-    const t = setInterval(() => { muatTerbaru(); muatGrafik(); muatStats() }, 30000)
+    muatUptime()
+    const t = setInterval(() => { muatTerbaru(); muatGrafik(); muatStats(); muatUptime() }, 30000)
     return () => clearInterval(t)
   }, [])
 
   const jamLabel = (iso: string) => formatSumbu(iso, rentang)
   const hero = ['suhu_air', 'ph', 'tds'].map((k) => METRIK.find((m) => m.key === k)!)
+
+  // Anggap offline kalau data terakhir lebih dari 3 menit lalu
+  const online = waktuTerbaru ? (Date.now() - new Date(waktuTerbaru).getTime()) < 3 * 60 * 1000 : false
 
   // Palet warna, berubah sesuai dark mode
   const t = dark
@@ -203,17 +258,28 @@ export default function Dashboard() {
             {hero.map((m) => {
               const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
               const Icon = m.Icon
+              const anomali = statusMetrik(m.key, nilai).label === 'Perlu Cek'
               return (
-                <div key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div key={m.key} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: anomali ? '8px 16px 8px 8px' : 0,
+                  borderRadius: 14,
+                  background: anomali ? 'rgba(248,113,113,0.16)' : 'transparent',
+                  border: anomali ? '1px solid rgba(248,113,113,0.4)' : '1px solid transparent',
+                }}>
                   <div style={{
-                    width: 42, height: 42, borderRadius: 12, background: 'rgba(255,255,255,0.15)',
+                    width: 42, height: 42, borderRadius: 12,
+                    background: anomali ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.15)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}>
-                    <Icon size={20} color="#fff" />
+                    <Icon size={20} color={anomali ? '#fecaca' : '#fff'} />
                   </div>
                   <div>
-                    <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2 }}>{m.label}</div>
-                    <div style={{ fontSize: 24, fontWeight: 700 }}>
+                    <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      {m.label}
+                      {anomali && <AlertTriangle size={12} color="#fecaca" />}
+                    </div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: anomali ? '#fecaca' : '#fff' }}>
                       {fmt(nilai, m.desimal)}
                       <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> {m.satuan}</span>
                     </div>
@@ -226,10 +292,28 @@ export default function Dashboard() {
             position: 'absolute', right: -10, top: -10, width: 160, height: 160, borderRadius: '50%',
             background: 'rgba(255,255,255,0.08)',
           }} />
-          <div style={{ marginTop: 24, fontSize: 12, opacity: 0.75 }}>
-            {waktuTerbaru
-              ? `Data terakhir ${new Date(waktuTerbaru).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
-              : 'Menunggu data dari perangkat'}
+          <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, opacity: 0.9 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
+              background: online ? 'rgba(163,230,53,0.2)' : 'rgba(248,113,113,0.2)',
+              color: online ? '#a3e635' : '#fca5a5', fontWeight: 600,
+            }}>
+              {online ? <Wifi size={12} /> : <WifiOff size={12} />}
+              {online ? 'Online' : 'Offline'}
+            </span>
+            {uptime != null && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 999,
+                background: 'rgba(255,255,255,0.15)', fontWeight: 600,
+              }}>
+                Uptime 24 jam: {uptime}%
+              </span>
+            )}
+            <span style={{ opacity: 0.75 }}>
+              {waktuTerbaru
+                ? `Data terakhir ${new Date(waktuTerbaru).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+                : 'Menunggu data dari perangkat'}
+            </span>
           </div>
         </section>
 
@@ -240,7 +324,7 @@ export default function Dashboard() {
         )}
 
         {/* GRID: chart + alert */}
-        <section style={{
+        <section className="chart-alert-grid" style={{
           display: 'grid', gridTemplateColumns: 'minmax(0, 1.7fr) minmax(0, 1fr)',
           gap: 16, marginBottom: 16,
         }}>
@@ -320,8 +404,26 @@ export default function Dashboard() {
 
         {/* Tabel status + statistik */}
         <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '1rem 1.5rem', borderBottom: `1px solid ${t.rowBorder}`, fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>
-            Status &amp; Statistik Sensor <span style={{ fontWeight: 400, fontSize: 12, color: t.sub }}>({rentangAktif.label} terakhir)</span>
+          <div style={{
+            padding: '1rem 1.5rem', borderBottom: `1px solid ${t.rowBorder}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
+          }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>
+              Status &amp; Statistik Sensor <span style={{ fontWeight: 400, fontSize: 12, color: t.sub }}>({rentangAktif.label} terakhir)</span>
+            </span>
+            <button
+              onClick={eksporCSV}
+              disabled={mengekspor}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
+                padding: '6px 12px', borderRadius: 8, cursor: mengekspor ? 'default' : 'pointer',
+                border: `1px solid ${t.border}`, background: dark ? '#1f2b25' : '#f0fdf4',
+                color: dark ? '#a3e635' : '#15803d', opacity: mengekspor ? 0.6 : 1,
+              }}
+            >
+              <Download size={13} />
+              {mengekspor ? 'Menyiapkan...' : 'Ekspor CSV'}
+            </button>
           </div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: 620 }}>
@@ -344,7 +446,10 @@ export default function Dashboard() {
                   const avg = stats[`${m.key}_avg`]
                   const max = stats[`${m.key}_max`]
                   return (
-                    <tr key={m.key} style={{ borderTop: `1px solid ${t.rowBorder}` }}>
+                    <tr key={m.key} style={{
+                      borderTop: `1px solid ${t.rowBorder}`,
+                      background: st.label === 'Perlu Cek' ? (dark ? 'rgba(180,83,9,0.15)' : '#fffbeb') : 'transparent',
+                    }}>
                       <td style={{ padding: '10px 1.5rem', fontWeight: 600, color: t.text }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{
@@ -382,25 +487,49 @@ export default function Dashboard() {
             <MapPin size={16} color={dark ? '#a3e635' : '#14532d'} />
             <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>Lokasi Greenhouse</span>
           </div>
-          <iframe
-            title="Lokasi greenhouse"
-            width="100%"
-            height="320"
-            style={{ border: 0, display: 'block' }}
-            loading="lazy"
-            src={`https://www.openstreetmap.org/export/embed.html?bbox=${LOKASI.lng - 0.01}%2C${LOKASI.lat - 0.008}%2C${LOKASI.lng + 0.01}%2C${LOKASI.lat + 0.008}&layer=mapnik&marker=${LOKASI.lat}%2C${LOKASI.lng}`}
-          />
+          <div style={{ position: 'relative' }}>
+            <iframe
+              title="Lokasi greenhouse"
+              width="100%"
+              height="320"
+              style={{ border: 0, display: 'block', pointerEvents: 'none' }}
+              loading="lazy"
+              tabIndex={-1}
+              src={`https://www.openstreetmap.org/export/embed.html?bbox=${LOKASI.lng - 0.01}%2C${LOKASI.lat - 0.008}%2C${LOKASI.lng + 0.01}%2C${LOKASI.lat + 0.008}&layer=mapnik&marker=${LOKASI.lat}%2C${LOKASI.lng}`}
+            />
+            <a
+              href={`https://www.google.com/maps/search/?api=1&query=${LOKASI.lat}%2C${LOKASI.lng}`}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Buka lokasi di Google Maps"
+              style={{ position: 'absolute', inset: 0, cursor: 'pointer' }}
+            />
+          </div>
           <div style={{ padding: '0.75rem 1.5rem', fontSize: 13 }}>
             <a
-              href={`https://www.openstreetmap.org/?mlat=${LOKASI.lat}&mlon=${LOKASI.lng}#map=17/${LOKASI.lat}/${LOKASI.lng}`}
+              href={`https://www.google.com/maps/search/?api=1&query=${LOKASI.lat}%2C${LOKASI.lng}`}
               target="_blank" rel="noreferrer"
               style={{ color: dark ? '#a3e635' : '#15803d', display: 'inline-flex', alignItems: 'center', gap: 4 }}
             >
-              Buka peta lebih besar <ExternalLink size={12} />
+              Buka di Google Maps <ExternalLink size={12} />
             </a>
           </div>
         </section>
       </main>
+
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .chart-alert-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+        @media (max-width: 480px) {
+          table td, table th {
+            padding-left: 1rem !important;
+            padding-right: 0.6rem !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
