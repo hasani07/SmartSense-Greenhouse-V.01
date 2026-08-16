@@ -1,7 +1,7 @@
 {
-  "name": "SmartSense Greenhouse Melon",
-  "short_name": "SmartSense",
-  "description": "Dashboard monitoring sensor greenhouse melon real-time",
+  "name": "WIMA FARM - Greenhouse Melon",
+  "short_name": "WIMA FARM",
+  "description": "Dashboard monitoring sensor greenhouse melon WIMA FARM real-time",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f4f6f2",
