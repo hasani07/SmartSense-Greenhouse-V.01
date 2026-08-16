@@ -1,0 +1,13 @@
+{
+  "name": "SmartSense Greenhouse Melon",
+  "short_name": "SmartSense",
+  "description": "Dashboard monitoring sensor greenhouse melon real-time",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f6f2",
+  "theme_color": "#15803d",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
