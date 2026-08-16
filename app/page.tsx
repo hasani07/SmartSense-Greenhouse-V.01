@@ -46,7 +46,7 @@ const METRIK = [
 ] as const
 
 const RENTANG = [
-  { key: '24h', label: '24 jam', jamMundur: 24,        bucketMenit: 1 },
+  { key: '24h', label: '24 jam', jamMundur: 24,        bucketMenit: 5 },
   { key: '7d',  label: '7 hari', jamMundur: 24 * 7,    bucketMenit: 60 },
   { key: '30d', label: '30 hari', jamMundur: 24 * 30,  bucketMenit: 240 },
   { key: '1y',  label: '1 tahun', jamMundur: 24 * 365, bucketMenit: 1440 },
@@ -356,7 +356,7 @@ export default function Dashboard() {
       .eq('device_id', 'esp32-01')
       .gte('created_at', since)
     if (error || count == null) return
-    const perkiraanTotal = 24 * 60
+    const perkiraanTotal = 24 * 60 / 5 // asumsi kirim tiap 5 menit
     setUptime(Math.min(100, Math.round((count / perkiraanTotal) * 100)))
   }
 
@@ -589,7 +589,7 @@ export default function Dashboard() {
   const jamLabel = (iso: string) => formatSumbu(iso, rentang)
   const hero = ['suhu_air', 'ph', 'tds'].map((k) => cariMetrik(k))
 
-  const online = waktuTerbaru ? (Date.now() - new Date(waktuTerbaru).getTime()) < 3 * 60 * 1000 : false
+  const online = waktuTerbaru ? (Date.now() - new Date(waktuTerbaru).getTime()) < 12 * 60 * 1000 : false
 
   const nilaiVPD = hitungVPD(terbaru?.suhu_udara ?? null, terbaru?.hum_udara ?? null)
   const stVPD = hitungStatus(nilaiVPD, idealVPDAktif)
