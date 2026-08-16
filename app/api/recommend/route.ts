@@ -9,7 +9,7 @@ function hitungVPD(suhu: number | null | undefined, rh: number | null | undefine
 
 export async function POST(req: Request) {
   const body = await req.json()
-  const { suhu_air, ph, tds, suhu_udara, hum_udara, lux, jarak } = body
+  const { suhu_air, ph, tds, suhu_udara, hum_udara, lux, jarak, rentangIdeal } = body
   const vpd = hitungVPD(suhu_udara, hum_udara)
 
   if (!process.env.GROQ_API_KEY) {
@@ -18,18 +18,25 @@ export async function POST(req: Request) {
     })
   }
 
-  const prompt = `Kamu asisten monitoring greenhouse akuaponik/hidroponik. Berdasarkan data sensor berikut, beri 2-3 rekomendasi singkat dan actionable dalam bahasa Indonesia, format list bernomor, tanpa basa-basi:
+  function fmtRentang(key: string) {
+    const r = rentangIdeal?.[key]
+    return r ? `${r[0]} - ${r[1]}` : 'tidak ditentukan'
+  }
 
-Suhu air: ${suhu_air} C
-pH: ${ph}
-TDS: ${tds} ppm
-Suhu udara: ${suhu_udara} C
-Kelembaban udara: ${hum_udara} %
+  const prompt = `Kamu asisten monitoring greenhouse akuaponik/hidroponik. Berdasarkan data sensor DAN rentang ideal yang SUDAH DITENTUKAN PENGGUNA di bawah ini, beri 2-3 rekomendasi singkat dan actionable dalam bahasa Indonesia, format list bernomor, tanpa basa-basi.
+
+PENTING: nilai "rentang ideal" di bawah adalah acuan RESMI yang harus kamu pakai untuk menilai normal/tidaknya suatu sensor -- JANGAN pakai asumsi umummu sendiri soal sayuran/tanaman pada umumnya, walaupun asumsimu berbeda dari rentang ini.
+
+Suhu air: ${suhu_air} C (rentang ideal: ${fmtRentang('suhu_air')})
+pH: ${ph} (rentang ideal: ${fmtRentang('ph')})
+TDS: ${tds} ppm (rentang ideal: ${fmtRentang('tds')})
+Suhu udara: ${suhu_udara} C (rentang ideal: ${fmtRentang('suhu_udara')})
+Kelembaban udara: ${hum_udara} % (rentang ideal: ${fmtRentang('hum_udara')})
 Cahaya: ${lux} lux
 Ketinggian air: ${jarak} cm
-VPD (indikator stres tanaman, acuan umum optimal 0.4-1.6 kPa): ${vpd ?? 'tidak dapat dihitung, data suhu/kelembaban udara belum ada'} kPa
+VPD (indikator stres tanaman): ${vpd ?? 'tidak dapat dihitung, data suhu/kelembaban udara belum ada'} kPa (rentang ideal: ${fmtRentang('vpd')})
 
-Kalau semua nilai dalam rentang wajar untuk sayuran umum, katakan kondisi baik dan beri satu tips perawatan ringan.`
+Kalau semua nilai ada dalam rentang ideal yang diberikan, katakan kondisi baik dan beri satu tips perawatan ringan.`
 
   try {
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
