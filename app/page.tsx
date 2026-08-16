@@ -9,6 +9,7 @@ import {
 import {
   Sprout, Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
   MapPin, Sparkles, ExternalLink, Wifi, WifiOff, AlertTriangle, Download, Gauge,
+  GitCompare, History,
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -31,8 +32,6 @@ type Stats = Record<string, number | null>
 
 const LOKASI = { lat: -7.713542, lng: 110.440141 }
 
-// Acuan umum kondisi ideal melon hidroponik/greenhouse -- sifatnya indikatif,
-// sesuaikan lagi dengan varietas dan SOP budidaya Anda sendiri.
 const METRIK = [
   { key: 'suhu_air',   label: 'Suhu Air',    satuan: '°C',  desimal: 1, warna: '#0e7490', ideal: [20, 28] as [number, number] | null, Icon: Thermometer },
   { key: 'ph',         label: 'pH',          satuan: '',    desimal: 2, warna: '#7c3aed', ideal: [5.8, 6.8] as [number, number] | null, Icon: FlaskConical },
@@ -50,8 +49,12 @@ const RENTANG = [
   { key: '1y',  label: '1 tahun', jamMundur: 24 * 365, bucketMenit: 1440 },
 ] as const
 
+function metrikByKey(key: string) {
+  return METRIK.find((m) => m.key === key)
+}
+
 function statusMetrik(key: string, nilai: number | null | undefined) {
-  const m = METRIK.find((x) => x.key === key)!
+  const m = metrikByKey(key)!
   if (nilai == null || !m.ideal) return { label: 'Normal', warna: '#6b7280', bg: '#f3f4f6' }
   const [lo, hi] = m.ideal
   if (nilai < lo || nilai > hi) return { label: 'Perlu Cek', warna: '#b45309', bg: '#fef3c7' }
@@ -68,9 +71,6 @@ function fmt(v: number | null | undefined, desimal: number) {
   return v == null ? '—' : v.toFixed(desimal)
 }
 
-// VPD (Vapor Pressure Deficit) -- indikator gabungan suhu+kelembaban udara
-// yang dipakai luas di greenhouse untuk memperkirakan stres tanaman/risiko jamur.
-// Rumus Tetens. Rentang 0.4-1.6 kPa adalah acuan umum, bukan presisi ilmiah ketat.
 function hitungVPD(suhu: number | null | undefined, rh: number | null | undefined): number | null {
   if (suhu == null || rh == null) return null
   const svp = 0.6108 * Math.exp((17.27 * suhu) / (suhu + 237.3))
@@ -82,7 +82,6 @@ function statusVPD(v: number | null) {
   return { label: 'Optimal', warna: '#15803d', bg: '#dcfce7' }
 }
 
-// Prediksi tren linear sederhana (regresi least-squares), BUKAN model AI/ML.
 function prediksiTren(nilai: number[], jumlahPrediksi: number): number[] {
   const n = nilai.length
   if (n < 4) return []
@@ -115,6 +114,9 @@ function warnaHeatmap(nilai: number | null, m: (typeof METRIK)[number], semuaNil
 
 export default function Dashboard() {
   const [data, setData] = useState<Titik[]>([])
+  const [kemarin, setKemarin] = useState<Titik[]>([])
+  const [tampilkanKemarin, setTampilkanKemarin] = useState(false)
+  const [pembanding, setPembanding] = useState<string>('')
   const [stats, setStats] = useState<Stats>({})
   const [heatmap, setHeatmap] = useState<Titik[]>([])
   const [macet, setMacet] = useState<Record<string, boolean>>({})
@@ -129,6 +131,13 @@ export default function Dashboard() {
   const [uptime, setUptime] = useState<number | null>(null)
   const [live, setLive] = useState(false)
   const [mengekspor, setMengekspor] = useState(false)
+  const [jamSekarang, setJamSekarang] = useState<Date | null>(null)
+
+  useEffect(() => {
+    setJamSekarang(new Date())
+    const iv = setInterval(() => setJamSekarang(new Date()), 1000)
+    return () => clearInterval(iv)
+  }, [])
 
   useEffect(() => {
     const saved = localStorage.getItem('dashboard-dark')
@@ -143,7 +152,7 @@ export default function Dashboard() {
   }
 
   const rentangAktif = RENTANG.find((r) => r.key === rentang)!
-  const aktif = METRIK.find((m) => m.key === grafik)!
+  const aktif = metrikByKey(grafik)!
 
   async function muatGrafik() {
     const start = new Date(Date.now() - rentangAktif.jamMundur * 3600 * 1000).toISOString()
@@ -155,6 +164,22 @@ export default function Dashboard() {
     if (error) { setError(error.message); return }
     setError(null)
     setData(data ?? [])
+  }
+
+  async function muatKemarin() {
+    if (rentang !== '24h') { setKemarin([]); return }
+    const start = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
+    const { data, error } = await supabase.rpc('readings_bucketed', {
+      p_device_id: 'esp32-01',
+      p_start: start,
+      p_bucket_minutes: 1,
+    })
+    if (error || !data) { setKemarin([]); return }
+    const batas = Date.now() - 24 * 3600 * 1000
+    const digeser = data
+      .filter((d: any) => new Date(d.bucket).getTime() < batas)
+      .map((d: any) => ({ ...d, bucket: new Date(new Date(d.bucket).getTime() + 24 * 3600 * 1000).toISOString() }))
+    setKemarin(digeser)
   }
 
   async function muatStats() {
@@ -202,7 +227,7 @@ export default function Dashboard() {
       .eq('device_id', 'esp32-01')
       .gte('created_at', since)
     if (error || count == null) return
-    const perkiraanTotal = 24 * 60 // asumsi kirim tiap 1 menit
+    const perkiraanTotal = 24 * 60
     setUptime(Math.min(100, Math.round((count / perkiraanTotal) * 100)))
   }
 
@@ -274,7 +299,8 @@ export default function Dashboard() {
     }
   }
 
-  useEffect(() => { muatGrafik(); muatStats() }, [rentang])
+  useEffect(() => { muatGrafik(); muatStats(); muatKemarin() }, [rentang])
+  useEffect(() => { muatKemarin() }, [tampilkanKemarin])
 
   useEffect(() => {
     muatTerbaru()
@@ -287,9 +313,6 @@ export default function Dashboard() {
     return () => clearInterval(t)
   }, [])
 
-  // Realtime: begitu ESP32 insert baris baru, dashboard langsung update
-  // tanpa nunggu polling 30 detik. Perlu Realtime diaktifkan di Supabase
-  // untuk tabel 'readings' (lihat supabase_schema_realtime.sql).
   useEffect(() => {
     const channel = supabase
       .channel('readings-realtime')
@@ -317,7 +340,7 @@ export default function Dashboard() {
   }, [rentang])
 
   const jamLabel = (iso: string) => formatSumbu(iso, rentang)
-  const hero = ['suhu_air', 'ph', 'tds'].map((k) => METRIK.find((m) => m.key === k)!)
+  const hero = ['suhu_air', 'ph', 'tds'].map((k) => metrikByKey(k)!)
 
   const online = waktuTerbaru ? (Date.now() - new Date(waktuTerbaru).getTime()) < 3 * 60 * 1000 : false
 
@@ -325,26 +348,59 @@ export default function Dashboard() {
   const stVPD = statusVPD(nilaiVPD)
   const anomaliVPD = stVPD.label === 'Perlu Cek'
 
-  // Data grafik + garis prediksi tren (dashed) menyambung dari titik terakhir
+  // Gabungkan data hari ini + overlay kemarin + garis prediksi
   const dataUntukChart = (() => {
+    const kemarinMap = new Map<string, number | null>()
+    kemarin.forEach((k) => kemarinMap.set(k.bucket, (k as any)[grafik] ?? null))
+
+    const base = data.map((d) => ({
+      ...d,
+      kemarinNilai: kemarinMap.get(d.bucket) ?? null,
+      prediksi: null as number | null,
+    }))
+
     const valid = data.filter((d) => (d as any)[grafik] != null)
     const window = valid.slice(-10).map((d) => (d as any)[grafik] as number)
-    const prediksi = prediksiTren(window, 3)
-    const hasil = data.map((d) => ({ ...d, prediksi: null as number | null }))
-    if (prediksi.length === 0 || hasil.length === 0) return hasil
+    const prediksiArr = prediksiTren(window, 3)
+    if (prediksiArr.length === 0 || base.length === 0) return base
 
     const last = data[data.length - 1]
     const bucketMs = rentangAktif.bucketMenit * 60000
     const lastTime = new Date(last.bucket).getTime()
-    hasil[hasil.length - 1] = { ...hasil[hasil.length - 1], prediksi: (last as any)[grafik] }
-    prediksi.forEach((v, i) => {
-      hasil.push({
+    base[base.length - 1] = { ...base[base.length - 1], prediksi: (last as any)[grafik] }
+    prediksiArr.forEach((v, i) => {
+      base.push({
         bucket: new Date(lastTime + (i + 1) * bucketMs).toISOString(),
         jarak: null, lux: null, suhu_udara: null, hum_udara: null, suhu_air: null, tds: null, ph: null,
-        prediksi: v,
+        kemarinNilai: null, prediksi: v,
       } as any)
     })
-    return hasil
+    return base
+  })()
+
+  // Riwayat anomali untuk metrik yang sedang ditampilkan di grafik
+  const riwayatAnomali = (() => {
+    if (!aktif.ideal) return []
+    const [lo, hi] = aktif.ideal
+    const hasil: { mulai: string; selesai: string; min: number; max: number }[] = []
+    let sedang: { mulai: string; selesai: string; min: number; max: number } | null = null
+    data.forEach((d) => {
+      const v = (d as any)[grafik] as number | null
+      const buruk = v != null && (v < lo || v > hi)
+      if (buruk) {
+        if (!sedang) sedang = { mulai: d.bucket, selesai: d.bucket, min: v as number, max: v as number }
+        else {
+          sedang.selesai = d.bucket
+          sedang.min = Math.min(sedang.min, v as number)
+          sedang.max = Math.max(sedang.max, v as number)
+        }
+      } else if (sedang) {
+        hasil.push(sedang)
+        sedang = null
+      }
+    })
+    if (sedang) hasil.push(sedang)
+    return hasil.reverse()
   })()
 
   const t = dark
@@ -359,20 +415,28 @@ export default function Dashboard() {
       }}>
 
         {/* Logo bar */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
           <div style={{
             width: 36, height: 36, borderRadius: 10, background: '#15803d',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Sprout color="#fff" size={20} />
           </div>
-          <span style={{ fontSize: 16, fontWeight: 700, color: dark ? '#e5e7eb' : '#14532d' }}>SmartSense</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: dark ? '#e5e7eb' : '#14532d' }}>WIMA FARM</span>
           <span style={{ fontSize: 13, color: t.sub }}>Greenhouse Melon</span>
+
+          {jamSekarang && (
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: t.sub, fontWeight: 500 }}>
+              {jamSekarang.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              {' · '}
+              {jamSekarang.toLocaleTimeString('id-ID')}
+            </span>
+          )}
 
           <button
             onClick={toggleDark}
             style={{
-              marginLeft: 'auto', width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
+              width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
               border: `1px solid ${t.border}`, background: t.card,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
@@ -423,7 +487,6 @@ export default function Dashboard() {
               )
             })}
 
-            {/* VPD */}
             <div style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: anomaliVPD ? '8px 16px 8px 8px' : 0,
@@ -544,22 +607,59 @@ export default function Dashboard() {
               })}
             </div>
 
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', margin: '4px 0 8px', fontSize: 11 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <GitCompare size={12} />
+                Bandingkan:
+                <select
+                  value={pembanding}
+                  onChange={(e) => setPembanding(e.target.value)}
+                  style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, fontSize: 11, padding: '2px 6px' }}
+                >
+                  <option value="" style={{ color: '#000' }}>Tanpa perbandingan</option>
+                  {METRIK.filter((m) => m.key !== grafik).map((m) => (
+                    <option key={m.key} value={m.key} style={{ color: '#000' }}>{m.label}</option>
+                  ))}
+                </select>
+              </label>
+              {rentang === '24h' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={tampilkanKemarin} onChange={(e) => setTampilkanKemarin(e.target.checked)} />
+                  vs kemarin
+                </label>
+              )}
+            </div>
+
             <div style={{ height: 240, marginTop: 8 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={dataUntukChart} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                   <CartesianGrid stroke="rgba(255,255,255,0.1)" vertical={false} />
                   <XAxis dataKey="bucket" tickFormatter={jamLabel} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} minTickGap={40} />
-                  <YAxis tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} domain={['auto', 'auto']} />
+                  <YAxis yAxisId="kiri" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} domain={['auto', 'auto']} />
+                  {pembanding && (
+                    <YAxis yAxisId="kanan" orientation="right" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} domain={['auto', 'auto']} />
+                  )}
                   <Tooltip
                     labelFormatter={(v) => jamLabel(v as string)}
-                    formatter={(v: number, nama: string) => [
-                      `${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`,
-                      nama === 'prediksi' ? `${aktif.label} (prediksi)` : aktif.label,
-                    ]}
+                    formatter={(v: number, nama: string) => {
+                      if (nama === 'prediksi') return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, `${aktif.label} (prediksi)`]
+                      if (nama === 'kemarinNilai') return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, `${aktif.label} (kemarin)`]
+                      if (nama === pembanding) {
+                        const mb = metrikByKey(pembanding)!
+                        return [`${v?.toFixed?.(mb.desimal) ?? v} ${mb.satuan}`, mb.label]
+                      }
+                      return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, aktif.label]
+                    }}
                     contentStyle={{ background: '#0f3d20', border: 'none', borderRadius: 8, fontSize: 12 }}
                   />
-                  <Line type="monotone" dataKey={grafik} stroke="#a3e635" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
-                  <Line type="monotone" dataKey="prediksi" stroke="#facc15" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls isAnimationActive={false} />
+                  <Line yAxisId="kiri" type="monotone" dataKey={grafik} stroke="#a3e635" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
+                  <Line yAxisId="kiri" type="monotone" dataKey="prediksi" stroke="#facc15" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls isAnimationActive={false} />
+                  {tampilkanKemarin && (
+                    <Line yAxisId="kiri" type="monotone" dataKey="kemarinNilai" stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="2 4" dot={false} connectNulls isAnimationActive={false} />
+                  )}
+                  {pembanding && (
+                    <Line yAxisId="kanan" type="monotone" dataKey={pembanding} stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                  )}
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -567,7 +667,7 @@ export default function Dashboard() {
               <p style={{ fontSize: 12, opacity: 0.6, textAlign: 'center', marginTop: 8 }}>Belum ada data untuk rentang ini.</p>
             )}
             <p style={{ fontSize: 10, opacity: 0.55, marginTop: 6 }}>
-              Garis putus-putus kuning: prediksi tren linear sederhana dari data terakhir, bukan model AI/machine learning.
+              Kuning putus-putus: prediksi tren linear sederhana (bukan AI/ML). Abu-abu putus-putus: data kemarin di jam yang sama. Biru: metrik pembanding (sumbu kanan).
             </p>
           </div>
 
@@ -580,6 +680,35 @@ export default function Dashboard() {
               {loadingRekomendasi ? 'Menganalisis data sensor...' : (rekomendasi || 'Menunggu data pertama...')}
             </div>
           </div>
+        </section>
+
+        {/* Riwayat anomali */}
+        <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <History size={16} color={dark ? '#e5e7eb' : '#14532d'} />
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>
+              Riwayat Anomali -- {aktif.label}
+            </span>
+            <span style={{ fontWeight: 400, fontSize: 12, color: t.sub }}>({rentangAktif.label} terakhir)</span>
+          </div>
+          {!aktif.ideal ? (
+            <p style={{ fontSize: 13, color: t.sub }}>Metrik ini tidak punya rentang ideal terdefinisi, riwayat anomali tidak berlaku.</p>
+          ) : riwayatAnomali.length === 0 ? (
+            <p style={{ fontSize: 13, color: '#15803d' }}>Tidak ada anomali pada rentang ini -- kondisi stabil.</p>
+          ) : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {riwayatAnomali.slice(0, 10).map((a, i) => (
+                <li key={i} style={{
+                  fontSize: 12, padding: '8px 12px', borderRadius: 8,
+                  background: dark ? 'rgba(180,83,9,0.12)' : '#fffbeb', color: dark ? '#fcd34d' : '#92400e',
+                  display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6,
+                }}>
+                  <span>{jamLabel(a.mulai)} -- {jamLabel(a.selesai)}</span>
+                  <span>Min {fmt(a.min, aktif.desimal)} / Maks {fmt(a.max, aktif.desimal)} {aktif.satuan}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {/* Tabel status + statistik */}

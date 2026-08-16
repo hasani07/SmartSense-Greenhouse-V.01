@@ -2,8 +2,8 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'SmartSense Greenhouse Melon',
-  description: 'Dashboard monitoring sensor greenhouse melon real-time',
+  title: 'WIMA FARM - Greenhouse Melon',
+  description: 'Dashboard monitoring sensor greenhouse melon WIMA FARM real-time',
   manifest: '/manifest.json',
   icons: {
     icon: '/icon-192.png',
