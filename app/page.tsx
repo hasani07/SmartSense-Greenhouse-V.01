@@ -363,7 +363,6 @@ export default function Dashboard() {
     setTerbaru(data)
     setWaktuTerbaru(data.created_at)
     setLoadingAwal(false)
-    mintaRekomendasi(data)
   }
 
   async function mintaRekomendasi(r: any) {
@@ -559,7 +558,6 @@ export default function Dashboard() {
           const baru = payload.new as Titik
           setTerbaru(baru)
           setWaktuTerbaru((baru as any).created_at)
-          mintaRekomendasi(baru)
           muatGrafik()
           muatStats()
           muatUptime()
@@ -1076,12 +1074,27 @@ export default function Dashboard() {
           </div>
 
           <div style={{ borderRadius: 20, padding: 'clamp(1.25rem, 2vw, 1.75rem)', background: '#fef9c3', border: '1px solid #fde68a' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <Sparkles size={18} color="#b45309" />
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#78350f' }}>Rekomendasi AI</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#78350f', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Sparkles size={18} color="#b45309" /> Rekomendasi AI
+              </span>
+              <button
+                onClick={() => terbaru && mintaRekomendasi(terbaru)}
+                disabled={loadingRekomendasi || !terbaru}
+                style={{
+                  fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8,
+                  cursor: (loadingRekomendasi || !terbaru) ? 'default' : 'pointer',
+                  border: '1px solid #b45309', background: '#fff', color: '#b45309',
+                  opacity: (loadingRekomendasi || !terbaru) ? 0.6 : 1,
+                }}
+              >
+                {loadingRekomendasi ? 'Memuat...' : 'Get Data & Rekomendasi'}
+              </button>
             </div>
             <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
-              {loadingRekomendasi ? 'Menganalisis data sensor...' : (rekomendasi || 'Menunggu data pertama...')}
+              {loadingRekomendasi
+                ? 'Menganalisis data sensor...'
+                : (rekomendasi || 'Klik tombol di atas untuk mengambil data terbaru dan membuat rekomendasi.')}
             </div>
           </div>
         </section>
