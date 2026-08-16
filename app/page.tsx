@@ -9,7 +9,8 @@ import {
 import {
   Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
   MapPin, Sparkles, ExternalLink, Wifi, WifiOff, AlertTriangle, Download, Gauge,
-  GitCompare, History, Settings, Copy, X, FileText,
+  GitCompare, History, Settings, Copy, X, FileText, Maximize, Minimize,
+  ImageDown, CloudSun, Clock3,
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -68,6 +69,24 @@ function formatSumbu(iso: string, rentangKey: string) {
 
 function fmt(v: number | null | undefined, desimal: number) {
   return v == null ? '—' : v.toFixed(desimal)
+}
+
+function titikSparkline(nilai: (number | null)[], lebar: number, tinggi: number): string {
+  const valid = nilai.filter((v): v is number => v != null)
+  if (valid.length < 2) return ''
+  const min = Math.min(...valid)
+  const max = Math.max(...valid)
+  const rentang = max - min || 1
+  const langkah = lebar / (nilai.length - 1)
+  return nilai
+    .map((v, i) => {
+      if (v == null) return null
+      const x = i * langkah
+      const y = tinggi - ((v - min) / rentang) * tinggi
+      return `${x.toFixed(1)},${y.toFixed(1)}`
+    })
+    .filter(Boolean)
+    .join(' ')
 }
 
 function hitungVPD(suhu: number | null | undefined, rh: number | null | undefined): number | null {
@@ -155,6 +174,11 @@ export default function Dashboard() {
   const [ringkasan, setRingkasan] = useState('')
   const [loadingRingkasan, setLoadingRingkasan] = useState(false)
   const [loadingAwal, setLoadingAwal] = useState(true)
+  const [idealMalam, setIdealMalam] = useState<Record<string, [number, number]>>({})
+  const [logPengaturan, setLogPengaturan] = useState<{ waktu: string; label: string; lama: number; baru: number }[]>([])
+  const [modeKios, setModeKios] = useState(false)
+  const [cuacaLuar, setCuacaLuar] = useState<{ suhu: number | null; kelembaban: number | null } | null>(null)
+  const grafikRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setJamSekarang(new Date())
@@ -166,23 +190,64 @@ export default function Dashboard() {
     try {
       const saved = localStorage.getItem('dashboard-ideal')
       if (saved) setIdealCustom(JSON.parse(saved))
+      const savedMalam = localStorage.getItem('dashboard-ideal-malam')
+      if (savedMalam) setIdealMalam(JSON.parse(savedMalam))
+      const savedLog = localStorage.getItem('dashboard-log-pengaturan')
+      if (savedLog) setLogPengaturan(JSON.parse(savedLog))
     } catch {}
   }, [])
+
+  function catatLog(label: string, lama: number, baru: number) {
+    setLogPengaturan((prev) => {
+      const entri = { waktu: new Date().toISOString(), label, lama, baru }
+      const next = [entri, ...prev].slice(0, 50)
+      localStorage.setItem('dashboard-log-pengaturan', JSON.stringify(next))
+      return next
+    })
+  }
 
   function updateIdeal(key: string, index: 0 | 1, value: number) {
     setIdealCustom((prev) => {
       const dasar = prev[key] ?? (key === 'vpd' ? VPD_DEFAULT : (METRIK.find((m) => m.key === key)?.ideal ?? [0, 0]))
+      const lama = dasar[index]
       const baru = [...dasar] as [number, number]
       baru[index] = value
       const next = { ...prev, [key]: baru }
       localStorage.setItem('dashboard-ideal', JSON.stringify(next))
+      const namaMetrik = key === 'vpd' ? 'VPD' : (METRIK.find((m) => m.key === key)?.label ?? key)
+      catatLog(`${namaMetrik} ${index === 0 ? 'min' : 'maks'}`, lama, value)
+      return next
+    })
+  }
+
+  function updateIdealMalam(key: string, index: 0 | 1, value: number) {
+    setIdealMalam((prev) => {
+      const dasar = prev[key] ?? (key === 'vpd' ? VPD_DEFAULT : (METRIK.find((m) => m.key === key)?.ideal ?? [0, 0]))
+      const lama = dasar[index]
+      const baru = [...dasar] as [number, number]
+      baru[index] = value
+      const next = { ...prev, [key]: baru }
+      localStorage.setItem('dashboard-ideal-malam', JSON.stringify(next))
+      const namaMetrik = key === 'vpd' ? 'VPD' : (METRIK.find((m) => m.key === key)?.label ?? key)
+      catatLog(`${namaMetrik} ${index === 0 ? 'min' : 'maks'} (malam)`, lama, value)
+      return next
+    })
+  }
+
+  function hapusIdealMalam(key: string) {
+    setIdealMalam((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      localStorage.setItem('dashboard-ideal-malam', JSON.stringify(next))
       return next
     })
   }
 
   function resetIdeal() {
     localStorage.removeItem('dashboard-ideal')
+    localStorage.removeItem('dashboard-ideal-malam')
     setIdealCustom({})
+    setIdealMalam({})
   }
 
   useEffect(() => {
@@ -198,13 +263,16 @@ export default function Dashboard() {
   }
 
   const rentangAktif = RENTANG.find((r) => r.key === rentang)!
-  const metrikGabungan = METRIK.map((m) => ({
-    ...m,
-    ideal: (idealCustom[m.key] ?? m.ideal) as [number, number] | null,
-  }))
+  const jamSaatIni = jamSekarang ? jamSekarang.getHours() : new Date().getHours()
+  const isMalam = jamSaatIni >= 18 || jamSaatIni < 6
+  const metrikGabungan = METRIK.map((m) => {
+    const idealSiang = (idealCustom[m.key] ?? m.ideal) as [number, number] | null
+    const pakaiMalam = isMalam && idealMalam[m.key]
+    return { ...m, ideal: (pakaiMalam ? idealMalam[m.key] : idealSiang) as [number, number] | null }
+  })
   const cariMetrik = (key: string) => metrikGabungan.find((m) => m.key === key)!
   const aktif = cariMetrik(grafik)
-  const idealVPDAktif = idealCustom['vpd'] ?? VPD_DEFAULT
+  const idealVPDAktif = (isMalam && idealMalam['vpd']) ? idealMalam['vpd'] : (idealCustom['vpd'] ?? VPD_DEFAULT)
 
   async function muatGrafik() {
     const start = new Date(Date.now() - rentangAktif.jamMundur * 3600 * 1000).toISOString()
@@ -389,8 +457,86 @@ export default function Dashboard() {
     if (ringkasan) navigator.clipboard.writeText(ringkasan)
   }
 
+  function eksporGrafikPNG() {
+    const svg = grafikRef.current?.querySelector('svg')
+    if (!svg) { alert('Grafik belum siap, coba lagi sebentar.'); return }
+
+    const svgKlon = svg.cloneNode(true) as SVGSVGElement
+    const lebar = svg.clientWidth || 600
+    const tinggi = svg.clientHeight || 240
+    svgKlon.setAttribute('width', String(lebar))
+    svgKlon.setAttribute('height', String(tinggi))
+
+    const svgStr = new XMLSerializer().serializeToString(svgKlon)
+    const svgBlob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(svgBlob)
+
+    const img = new Image()
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width = lebar * 2
+      canvas.height = tinggi * 2
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.scale(2, 2)
+      ctx.fillStyle = '#14532d'
+      ctx.fillRect(0, 0, lebar, tinggi)
+      ctx.drawImage(img, 0, 0, lebar, tinggi)
+      URL.revokeObjectURL(url)
+
+      const a = document.createElement('a')
+      a.href = canvas.toDataURL('image/png')
+      a.download = `wima-farm-${grafik}-${rentang}-${new Date().toISOString().slice(0, 10)}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
+    img.src = url
+  }
+
+  async function muatCuaca() {
+    try {
+      const res = await fetch('/api/cuaca')
+      const json = await res.json()
+      if (json.error) { setCuacaLuar(null); return }
+      setCuacaLuar({ suhu: json.suhu, kelembaban: json.kelembaban })
+    } catch {
+      setCuacaLuar(null)
+    }
+  }
+
+  function toggleModeKios() {
+    setModeKios((v) => {
+      const baru = !v
+      if (baru) {
+        document.documentElement.requestFullscreen?.().catch(() => {})
+      } else {
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {})
+      }
+      return baru
+    })
+  }
+
   useEffect(() => { muatGrafik(); muatStats(); muatKemarin() }, [rentang])
   useEffect(() => { muatKemarin() }, [tampilkanKemarin])
+
+  useEffect(() => {
+    muatCuaca()
+    const iv = setInterval(muatCuaca, 15 * 60 * 1000)
+    return () => clearInterval(iv)
+  }, [])
+
+  useEffect(() => {
+    if (!modeKios) return
+    const daftarKunci = METRIK.map((m) => m.key)
+    const iv = setInterval(() => {
+      setGrafik((cur) => {
+        const idx = daftarKunci.indexOf(cur)
+        return daftarKunci[(idx + 1) % daftarKunci.length]
+      })
+    }, 8000)
+    return () => clearInterval(iv)
+  }, [modeKios])
 
   useEffect(() => {
     muatTerbaru()
@@ -537,6 +683,18 @@ export default function Dashboard() {
           </button>
 
           <button
+            onClick={toggleModeKios}
+            style={{
+              width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
+              border: `1px solid ${t.border}`, background: modeKios ? '#15803d' : t.card,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            aria-label="Mode presentasi/kios"
+          >
+            {modeKios ? <Minimize size={16} color="#fff" /> : <Maximize size={16} color={dark ? '#e5e7eb' : '#374151'} />}
+          </button>
+
+          <button
             onClick={toggleDark}
             style={{
               width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
@@ -561,43 +719,60 @@ export default function Dashboard() {
               </button>
             </div>
             <p style={{ fontSize: 12, color: t.sub, marginBottom: 14 }}>
-              Ubah angka min/maks di bawah sesuai fase pertumbuhan atau SOP Anda. Perubahan tersimpan di browser ini dan langsung berlaku ke seluruh dashboard.
+              Ubah angka min/maks di bawah sesuai fase pertumbuhan atau SOP Anda. Aktifkan "rentang malam" kalau target 18:00-06:00 beda dari siang. Perubahan tersimpan di browser ini.
+              {isMalam && <strong style={{ color: '#b45309' }}> Saat ini status: malam.</strong>}
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              {metrikGabungan.filter((m) => m.ideal).map((m) => (
-                <div key={m.key} style={{ border: `1px solid ${t.rowBorder}`, borderRadius: 12, padding: 10 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 6 }}>{m.label} ({m.satuan || '-'})</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input
-                      type="number" step="any" value={m.ideal![0]}
-                      onChange={(e) => updateIdeal(m.key, 0, parseFloat(e.target.value))}
-                      style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
-                    />
-                    <span style={{ color: t.sub, fontSize: 12 }}>-</span>
-                    <input
-                      type="number" step="any" value={m.ideal![1]}
-                      onChange={(e) => updateIdeal(m.key, 1, parseFloat(e.target.value))}
-                      style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
-                    />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 12 }}>
+              {[...METRIK.filter((m) => m.ideal), { key: 'vpd', label: 'VPD', satuan: 'kPa' } as any].map((m) => {
+                const key = m.key
+                const siang = key === 'vpd' ? (idealCustom['vpd'] ?? VPD_DEFAULT) : (idealCustom[key] ?? (m.ideal as [number, number]))
+                const malam = idealMalam[key]
+                return (
+                  <div key={key} style={{ border: `1px solid ${t.rowBorder}`, borderRadius: 12, padding: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 6 }}>{m.label} ({m.satuan || '-'})</div>
+                    <div style={{ fontSize: 10, color: t.sub, marginBottom: 3 }}>Siang</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <input
+                        type="number" step="any" value={siang[0]}
+                        onChange={(e) => updateIdeal(key, 0, parseFloat(e.target.value))}
+                        style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                      />
+                      <span style={{ color: t.sub, fontSize: 12 }}>-</span>
+                      <input
+                        type="number" step="any" value={siang[1]}
+                        onChange={(e) => updateIdeal(key, 1, parseFloat(e.target.value))}
+                        style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                      />
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: t.sub, cursor: 'pointer', marginBottom: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={!!malam}
+                        onChange={(e) => {
+                          if (e.target.checked) { updateIdealMalam(key, 0, siang[0]); updateIdealMalam(key, 1, siang[1]) }
+                          else hapusIdealMalam(key)
+                        }}
+                      />
+                      Pakai rentang malam berbeda (18:00-06:00)
+                    </label>
+                    {malam && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <input
+                          type="number" step="any" value={malam[0]}
+                          onChange={(e) => updateIdealMalam(key, 0, parseFloat(e.target.value))}
+                          style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                        />
+                        <span style={{ color: t.sub, fontSize: 12 }}>-</span>
+                        <input
+                          type="number" step="any" value={malam[1]}
+                          onChange={(e) => updateIdealMalam(key, 1, parseFloat(e.target.value))}
+                          style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                        />
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
-              <div style={{ border: `1px solid ${t.rowBorder}`, borderRadius: 12, padding: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 6 }}>VPD (kPa)</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <input
-                    type="number" step="any" value={idealVPDAktif[0]}
-                    onChange={(e) => updateIdeal('vpd', 0, parseFloat(e.target.value))}
-                    style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
-                  />
-                  <span style={{ color: t.sub, fontSize: 12 }}>-</span>
-                  <input
-                    type="number" step="any" value={idealVPDAktif[1]}
-                    onChange={(e) => updateIdeal('vpd', 1, parseFloat(e.target.value))}
-                    style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
-                  />
-                </div>
-              </div>
+                )
+              })}
             </div>
             <button
               onClick={resetIdeal}
@@ -608,6 +783,22 @@ export default function Dashboard() {
             >
               Reset ke Default
             </button>
+
+            {logPengaturan.length > 0 && (
+              <div style={{ marginTop: 18, borderTop: `1px solid ${t.rowBorder}`, paddingTop: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Clock3 size={13} /> Riwayat Perubahan Pengaturan
+                </div>
+                <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {logPengaturan.slice(0, 20).map((l, i) => (
+                    <div key={i} style={{ fontSize: 11, color: t.sub }}>
+                      {new Date(l.waktu).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      {' — '}{l.label} diubah dari {l.lama} ke {l.baru}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         )}
 
@@ -646,10 +837,22 @@ export default function Dashboard() {
                     {loadingAwal ? (
                       <div className="pulsing" style={{ width: 64, height: 22, borderRadius: 6, background: 'rgba(255,255,255,0.25)' }} />
                     ) : (
-                      <div style={{ fontSize: 24, fontWeight: 700, color: anomali ? '#fecaca' : '#fff' }}>
-                        {fmt(nilaiAnimasi[m.key] ?? nilai, m.desimal)}
-                        <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> {m.satuan}</span>
-                      </div>
+                      <>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: anomali ? '#fecaca' : '#fff' }}>
+                          {fmt(nilaiAnimasi[m.key] ?? nilai, m.desimal)}
+                          <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> {m.satuan}</span>
+                        </div>
+                        {data.length > 1 && (
+                          <svg width="70" height="20" viewBox="0 0 70 20" style={{ marginTop: 2, opacity: 0.7 }}>
+                            <polyline
+                              points={titikSparkline(data.slice(-20).map((d) => (d as any)[m.key] ?? null), 70, 20)}
+                              fill="none"
+                              stroke={anomali ? '#fecaca' : '#a3e635'}
+                              strokeWidth="1.5"
+                            />
+                          </svg>
+                        )}
+                      </>
                     )}
                   </div>
                 </div>
@@ -678,10 +881,25 @@ export default function Dashboard() {
                 {loadingAwal ? (
                   <div className="pulsing" style={{ width: 64, height: 22, borderRadius: 6, background: 'rgba(255,255,255,0.25)' }} />
                 ) : (
-                  <div style={{ fontSize: 24, fontWeight: 700, color: anomaliVPD ? '#fecaca' : '#fff' }}>
-                    {fmt(vpdAnim ?? nilaiVPD, 2)}
-                    <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> kPa</span>
-                  </div>
+                  <>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: anomaliVPD ? '#fecaca' : '#fff' }}>
+                      {fmt(vpdAnim ?? nilaiVPD, 2)}
+                      <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> kPa</span>
+                    </div>
+                    {data.length > 1 && (
+                      <svg width="70" height="20" viewBox="0 0 70 20" style={{ marginTop: 2, opacity: 0.7 }}>
+                        <polyline
+                          points={titikSparkline(
+                            data.slice(-20).map((d) => hitungVPD((d as any).suhu_udara, (d as any).hum_udara)),
+                            70, 20
+                          )}
+                          fill="none"
+                          stroke={anomaliVPD ? '#fecaca' : '#a3e635'}
+                          strokeWidth="1.5"
+                        />
+                      </svg>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -739,7 +957,20 @@ export default function Dashboard() {
         }}>
           <div style={{ borderRadius: 20, padding: 'clamp(1.25rem, 2vw, 1.75rem)', background: '#14532d', color: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 600 }}>Growth Analytics</span>
+              <span style={{ fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                Growth Analytics
+                <button
+                  onClick={eksporGrafikPNG}
+                  title="Ekspor grafik sebagai gambar PNG"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 500,
+                    padding: '3px 8px', borderRadius: 999, cursor: 'pointer',
+                    border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#fff',
+                  }}
+                >
+                  <ImageDown size={11} /> PNG
+                </button>
+              </span>
               <div style={{ display: 'flex', gap: 4 }}>
                 {RENTANG.map((r) => (
                   <button
@@ -803,7 +1034,7 @@ export default function Dashboard() {
               )}
             </div>
 
-            <div style={{ height: 240, marginTop: 8 }}>
+            <div ref={grafikRef} style={{ height: 240, marginTop: 8 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={dataUntukChart} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                   <CartesianGrid stroke="rgba(255,255,255,0.1)" vertical={false} />
@@ -1063,6 +1294,37 @@ export default function Dashboard() {
             <p style={{ fontSize: 12, color: t.sub, marginTop: 8 }}>Belum cukup data untuk peta kalender.</p>
           )}
         </section>
+
+        {/* Cuaca luar vs greenhouse */}
+        {cuacaLuar && (
+          <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <CloudSun size={16} color={dark ? '#e5e7eb' : '#14532d'} />
+              <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>Cuaca Luar vs Greenhouse</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 11, color: t.sub, marginBottom: 2 }}>Suhu Luar</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: t.text }}>{fmt(cuacaLuar.suhu, 1)}°C</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: t.sub, marginBottom: 2 }}>Kelembaban Luar</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: t.text }}>{fmt(cuacaLuar.kelembaban, 0)}%</div>
+              </div>
+              {terbaru?.suhu_udara != null && cuacaLuar.suhu != null && (
+                <div>
+                  <div style={{ fontSize: 11, color: t.sub, marginBottom: 2 }}>Selisih Suhu</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: '#15803d' }}>
+                    {terbaru.suhu_udara > cuacaLuar.suhu ? '+' : ''}{(terbaru.suhu_udara - cuacaLuar.suhu).toFixed(1)}°C
+                  </div>
+                </div>
+              )}
+            </div>
+            <p style={{ fontSize: 10, color: t.sub, marginTop: 10 }}>
+              Data cuaca dari Open-Meteo, diperbarui tiap 15 menit. Selisih suhu positif berarti greenhouse lebih hangat dari luar.
+            </p>
+          </section>
+        )}
 
         {/* Peta lokasi */}
         <section style={{ borderRadius: 20, border: `1px solid ${t.border}`, overflow: 'hidden', background: t.card }}>
