@@ -10,7 +10,7 @@ import {
   Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
   MapPin, Sparkles, ExternalLink, Wifi, WifiOff, AlertTriangle, Download, Gauge,
   GitCompare, History, Settings, Copy, X, FileText, Maximize, Minimize,
-  ImageDown, CloudSun, Clock3,
+  ImageDown, CloudSun, Clock3, SignalHigh, SignalMedium, SignalLow,
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -27,6 +27,8 @@ type Titik = {
   suhu_air: number | null
   tds: number | null
   ph: number | null
+  firmware_version?: string | null
+  rssi?: number | null
 }
 
 type Stats = Record<string, number | null>
@@ -69,6 +71,13 @@ function formatSumbu(iso: string, rentangKey: string) {
 
 function fmt(v: number | null | undefined, desimal: number) {
   return v == null ? '—' : v.toFixed(desimal)
+}
+
+function kekuatanSinyal(rssi: number | null | undefined) {
+  if (rssi == null) return null
+  if (rssi >= -60) return { label: 'Kuat', warna: '#a3e635', Icon: SignalHigh }
+  if (rssi >= -75) return { label: 'Sedang', warna: '#facc15', Icon: SignalMedium }
+  return { label: 'Buruk', warna: '#fca5a5', Icon: SignalLow }
 }
 
 function titikSparkline(nilai: (number | null)[], lebar: number, tinggi: number): string {
@@ -934,6 +943,28 @@ export default function Dashboard() {
                 Uptime 24 jam: {uptime}%
               </span>
             )}
+            {terbaru?.firmware_version && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 999,
+                background: 'rgba(255,255,255,0.15)', fontWeight: 600,
+              }}>
+                Firmware v{terbaru.firmware_version}
+              </span>
+            )}
+            {(() => {
+              const sinyal = kekuatanSinyal(terbaru?.rssi)
+              if (!sinyal) return null
+              const SIcon = sinyal.Icon
+              return (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
+                  background: 'rgba(255,255,255,0.15)', fontWeight: 600, color: sinyal.warna,
+                }}>
+                  <SIcon size={12} />
+                  Sinyal {sinyal.label} ({terbaru?.rssi} dBm)
+                </span>
+              )
+            })()}
             <span style={{ opacity: 0.75 }}>
               {waktuTerbaru
                 ? `Data terakhir ${new Date(waktuTerbaru).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
