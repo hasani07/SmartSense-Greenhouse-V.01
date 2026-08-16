@@ -377,10 +377,14 @@ export default function Dashboard() {
   async function mintaRekomendasi(r: any) {
     setLoadingRekomendasi(true)
     try {
+      const rentangIdeal: Record<string, [number, number] | null> = {}
+      metrikGabungan.forEach((m) => { rentangIdeal[m.key] = m.ideal })
+      rentangIdeal['vpd'] = idealVPDAktif
+
       const res = await fetch('/api/recommend', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(r),
+        body: JSON.stringify({ ...r, rentangIdeal }),
       })
       const json = await res.json()
       setRekomendasi(json.text)
