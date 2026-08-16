@@ -528,7 +528,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!modeKios) return
-    const daftarKunci = METRIK.map((m) => m.key)
+    const daftarKunci: string[] = METRIK.map((m) => m.key)
     const iv = setInterval(() => {
       setGrafik((cur) => {
         const idx = daftarKunci.indexOf(cur)
