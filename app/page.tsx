@@ -9,7 +9,7 @@ import {
 import {
   Sprout, Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
   MapPin, Sparkles, ExternalLink, Wifi, WifiOff, AlertTriangle, Download, Gauge,
-  GitCompare, History,
+  GitCompare, History, Settings, Copy, X, FileText,
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -53,10 +53,9 @@ function metrikByKey(key: string) {
   return METRIK.find((m) => m.key === key)
 }
 
-function statusMetrik(key: string, nilai: number | null | undefined) {
-  const m = metrikByKey(key)!
-  if (nilai == null || !m.ideal) return { label: 'Normal', warna: '#6b7280', bg: '#f3f4f6' }
-  const [lo, hi] = m.ideal
+function hitungStatus(nilai: number | null | undefined, ideal: [number, number] | null) {
+  if (nilai == null || !ideal) return { label: 'Normal', warna: '#6b7280', bg: '#f3f4f6' }
+  const [lo, hi] = ideal
   if (nilai < lo || nilai > hi) return { label: 'Perlu Cek', warna: '#b45309', bg: '#fef3c7' }
   return { label: 'Optimal', warna: '#15803d', bg: '#dcfce7' }
 }
@@ -76,11 +75,7 @@ function hitungVPD(suhu: number | null | undefined, rh: number | null | undefine
   const svp = 0.6108 * Math.exp((17.27 * suhu) / (suhu + 237.3))
   return Number((svp * (1 - rh / 100)).toFixed(2))
 }
-function statusVPD(v: number | null) {
-  if (v == null) return { label: 'Normal', warna: '#6b7280', bg: '#f3f4f6' }
-  if (v < 0.4 || v > 1.6) return { label: 'Perlu Cek', warna: '#b45309', bg: '#fef3c7' }
-  return { label: 'Optimal', warna: '#15803d', bg: '#dcfce7' }
-}
+const VPD_DEFAULT: [number, number] = [0.4, 1.6]
 
 function prediksiTren(nilai: number[], jumlahPrediksi: number): number[] {
   const n = nilai.length
@@ -99,7 +94,7 @@ function prediksiTren(nilai: number[], jumlahPrediksi: number): number[] {
   return hasil
 }
 
-function warnaHeatmap(nilai: number | null, m: (typeof METRIK)[number], semuaNilai: number[]) {
+function warnaHeatmap(nilai: number | null, m: { ideal: [number, number] | null }, semuaNilai: number[]) {
   if (nilai == null) return '#e5e7eb'
   if (m.ideal) {
     const [lo, hi] = m.ideal
@@ -132,12 +127,39 @@ export default function Dashboard() {
   const [live, setLive] = useState(false)
   const [mengekspor, setMengekspor] = useState(false)
   const [jamSekarang, setJamSekarang] = useState<Date | null>(null)
+  const [idealCustom, setIdealCustom] = useState<Record<string, [number, number]>>({})
+  const [pengaturanTerbuka, setPengaturanTerbuka] = useState(false)
+  const [ringkasan, setRingkasan] = useState('')
+  const [loadingRingkasan, setLoadingRingkasan] = useState(false)
 
   useEffect(() => {
     setJamSekarang(new Date())
     const iv = setInterval(() => setJamSekarang(new Date()), 1000)
     return () => clearInterval(iv)
   }, [])
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('dashboard-ideal')
+      if (saved) setIdealCustom(JSON.parse(saved))
+    } catch {}
+  }, [])
+
+  function updateIdeal(key: string, index: 0 | 1, value: number) {
+    setIdealCustom((prev) => {
+      const dasar = prev[key] ?? (key === 'vpd' ? VPD_DEFAULT : (METRIK.find((m) => m.key === key)?.ideal ?? [0, 0]))
+      const baru = [...dasar] as [number, number]
+      baru[index] = value
+      const next = { ...prev, [key]: baru }
+      localStorage.setItem('dashboard-ideal', JSON.stringify(next))
+      return next
+    })
+  }
+
+  function resetIdeal() {
+    localStorage.removeItem('dashboard-ideal')
+    setIdealCustom({})
+  }
 
   useEffect(() => {
     const saved = localStorage.getItem('dashboard-dark')
@@ -152,7 +174,13 @@ export default function Dashboard() {
   }
 
   const rentangAktif = RENTANG.find((r) => r.key === rentang)!
-  const aktif = metrikByKey(grafik)!
+  const metrikGabungan = METRIK.map((m) => ({
+    ...m,
+    ideal: (idealCustom[m.key] ?? m.ideal) as [number, number] | null,
+  }))
+  const cariMetrik = (key: string) => metrikGabungan.find((m) => m.key === key)!
+  const aktif = cariMetrik(grafik)
+  const idealVPDAktif = idealCustom['vpd'] ?? VPD_DEFAULT
 
   async function muatGrafik() {
     const start = new Date(Date.now() - rentangAktif.jamMundur * 3600 * 1000).toISOString()
@@ -299,6 +327,43 @@ export default function Dashboard() {
     }
   }
 
+  async function buatRingkasan() {
+    setLoadingRingkasan(true)
+    try {
+      const anomaliCount: Record<string, number> = {}
+      metrikGabungan.forEach((m) => {
+        if (!m.ideal) return
+        const [lo, hi] = m.ideal
+        anomaliCount[m.key] = data.filter((d) => {
+          const v = (d as any)[m.key]
+          return v != null && (v < lo || v > hi)
+        }).length
+      })
+
+      const res = await fetch('/api/ringkasan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          periode: rentangAktif.label,
+          stats,
+          anomaliCount,
+          uptime,
+          vpd: nilaiVPD,
+        }),
+      })
+      const json = await res.json()
+      setRingkasan(json.text)
+    } catch {
+      setRingkasan('Gagal membuat ringkasan.')
+    } finally {
+      setLoadingRingkasan(false)
+    }
+  }
+
+  function salinRingkasan() {
+    if (ringkasan) navigator.clipboard.writeText(ringkasan)
+  }
+
   useEffect(() => { muatGrafik(); muatStats(); muatKemarin() }, [rentang])
   useEffect(() => { muatKemarin() }, [tampilkanKemarin])
 
@@ -340,12 +405,12 @@ export default function Dashboard() {
   }, [rentang])
 
   const jamLabel = (iso: string) => formatSumbu(iso, rentang)
-  const hero = ['suhu_air', 'ph', 'tds'].map((k) => metrikByKey(k)!)
+  const hero = ['suhu_air', 'ph', 'tds'].map((k) => cariMetrik(k))
 
   const online = waktuTerbaru ? (Date.now() - new Date(waktuTerbaru).getTime()) < 3 * 60 * 1000 : false
 
   const nilaiVPD = hitungVPD(terbaru?.suhu_udara ?? null, terbaru?.hum_udara ?? null)
-  const stVPD = statusVPD(nilaiVPD)
+  const stVPD = hitungStatus(nilaiVPD, idealVPDAktif)
   const anomaliVPD = stVPD.label === 'Perlu Cek'
 
   // Gabungkan data hari ini + overlay kemarin + garis prediksi
@@ -434,6 +499,18 @@ export default function Dashboard() {
           )}
 
           <button
+            onClick={() => setPengaturanTerbuka((v) => !v)}
+            style={{
+              width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
+              border: `1px solid ${t.border}`, background: t.card,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}
+            aria-label="Pengaturan rentang ideal"
+          >
+            <Settings size={16} color={dark ? '#e5e7eb' : '#374151'} />
+          </button>
+
+          <button
             onClick={toggleDark}
             style={{
               width: 36, height: 36, borderRadius: 10, cursor: 'pointer',
@@ -446,6 +523,68 @@ export default function Dashboard() {
           </button>
         </div>
 
+        {/* Panel pengaturan rentang ideal */}
+        {pengaturanTerbuka && (
+          <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Settings size={16} /> Pengaturan Rentang Ideal
+              </span>
+              <button onClick={() => setPengaturanTerbuka(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: t.sub }}>
+                <X size={18} />
+              </button>
+            </div>
+            <p style={{ fontSize: 12, color: t.sub, marginBottom: 14 }}>
+              Ubah angka min/maks di bawah sesuai fase pertumbuhan atau SOP Anda. Perubahan tersimpan di browser ini dan langsung berlaku ke seluruh dashboard.
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+              {metrikGabungan.filter((m) => m.ideal).map((m) => (
+                <div key={m.key} style={{ border: `1px solid ${t.rowBorder}`, borderRadius: 12, padding: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 6 }}>{m.label} ({m.satuan || '-'})</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="number" step="any" value={m.ideal![0]}
+                      onChange={(e) => updateIdeal(m.key, 0, parseFloat(e.target.value))}
+                      style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                    />
+                    <span style={{ color: t.sub, fontSize: 12 }}>-</span>
+                    <input
+                      type="number" step="any" value={m.ideal![1]}
+                      onChange={(e) => updateIdeal(m.key, 1, parseFloat(e.target.value))}
+                      style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                    />
+                  </div>
+                </div>
+              ))}
+              <div style={{ border: `1px solid ${t.rowBorder}`, borderRadius: 12, padding: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: t.text, marginBottom: 6 }}>VPD (kPa)</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input
+                    type="number" step="any" value={idealVPDAktif[0]}
+                    onChange={(e) => updateIdeal('vpd', 0, parseFloat(e.target.value))}
+                    style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                  />
+                  <span style={{ color: t.sub, fontSize: 12 }}>-</span>
+                  <input
+                    type="number" step="any" value={idealVPDAktif[1]}
+                    onChange={(e) => updateIdeal('vpd', 1, parseFloat(e.target.value))}
+                    style={{ width: '48%', fontSize: 12, padding: '4px 6px', borderRadius: 6, border: `1px solid ${t.border}`, background: t.bg, color: t.text }}
+                  />
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={resetIdeal}
+              style={{
+                marginTop: 14, fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${t.border}`, background: 'transparent', color: t.sub,
+              }}
+            >
+              Reset ke Default
+            </button>
+          </section>
+        )}
+
         {/* HERO */}
         <section style={{
           borderRadius: 24, padding: 'clamp(1.5rem, 4vw, 2.5rem)', marginBottom: '1.25rem',
@@ -457,7 +596,7 @@ export default function Dashboard() {
             {hero.map((m) => {
               const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
               const Icon = m.Icon
-              const anomali = statusMetrik(m.key, nilai).label === 'Perlu Cek'
+              const anomali = hitungStatus(nilai, m.ideal).label === 'Perlu Cek'
               return (
                 <div key={m.key} style={{
                   display: 'flex', alignItems: 'center', gap: 12,
@@ -586,7 +725,7 @@ export default function Dashboard() {
             </div>
 
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0 6px' }}>
-              {METRIK.map((m) => {
+              {metrikGabungan.map((m) => {
                 const Icon = m.Icon
                 return (
                   <button
@@ -617,7 +756,7 @@ export default function Dashboard() {
                   style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, fontSize: 11, padding: '2px 6px' }}
                 >
                   <option value="" style={{ color: '#000' }}>Tanpa perbandingan</option>
-                  {METRIK.filter((m) => m.key !== grafik).map((m) => (
+                  {metrikGabungan.filter((m) => m.key !== grafik).map((m) => (
                     <option key={m.key} value={m.key} style={{ color: '#000' }}>{m.label}</option>
                   ))}
                 </select>
@@ -645,7 +784,7 @@ export default function Dashboard() {
                       if (nama === 'prediksi') return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, `${aktif.label} (prediksi)`]
                       if (nama === 'kemarinNilai') return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, `${aktif.label} (kemarin)`]
                       if (nama === pembanding) {
-                        const mb = metrikByKey(pembanding)!
+                        const mb = cariMetrik(pembanding)
                         return [`${v?.toFixed?.(mb.desimal) ?? v} ${mb.satuan}`, mb.label]
                       }
                       return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, aktif.label]
@@ -747,9 +886,9 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {METRIK.map((m) => {
+                {metrikGabungan.map((m) => {
                   const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
-                  const st = statusMetrik(m.key, nilai)
+                  const st = hitungStatus(nilai, m.ideal)
                   const Icon = m.Icon
                   const min = stats[`${m.key}_min`]
                   const avg = stats[`${m.key}_avg`]
@@ -799,6 +938,47 @@ export default function Dashboard() {
           <p style={{ fontSize: 11, color: t.sub, padding: '10px 1.5rem' }}>
             Rentang "Optimal", VPD, prediksi tren, dan deteksi "mungkin macet" bersifat acuan/heuristik umum -- sesuaikan dengan SOP budidaya dan kondisi alat Anda sendiri.
           </p>
+        </section>
+
+        {/* Ringkasan naratif AI */}
+        <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={16} /> Ringkasan Naratif (AI)
+            </span>
+            <button
+              onClick={buatRingkasan}
+              disabled={loadingRingkasan}
+              style={{
+                fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: loadingRingkasan ? 'default' : 'pointer',
+                border: `1px solid ${t.border}`, background: dark ? '#1f2b25' : '#f0fdf4',
+                color: dark ? '#a3e635' : '#15803d', opacity: loadingRingkasan ? 0.6 : 1,
+              }}
+            >
+              {loadingRingkasan ? 'Menulis...' : `Buat Ringkasan (${rentangAktif.label})`}
+            </button>
+          </div>
+          {ringkasan ? (
+            <>
+              <p style={{ fontSize: 13, color: t.text, lineHeight: 1.7, whiteSpace: 'pre-line', marginBottom: 10 }}>
+                {ringkasan}
+              </p>
+              <button
+                onClick={salinRingkasan}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
+                  padding: '6px 12px', borderRadius: 8, cursor: 'pointer',
+                  border: `1px solid ${t.border}`, background: 'transparent', color: t.sub,
+                }}
+              >
+                <Copy size={12} /> Salin teks
+              </button>
+            </>
+          ) : (
+            <p style={{ fontSize: 13, color: t.sub }}>
+              Klik tombol di atas untuk membuat draf ringkasan siap-tempel ke laporan, berdasarkan statistik pada rentang waktu yang sedang dipilih.
+            </p>
+          )}
         </section>
 
         {/* Heatmap kalender */}
