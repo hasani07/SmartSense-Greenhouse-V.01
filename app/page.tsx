@@ -1,13 +1,13 @@
 // app/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import {
-  Sprout, Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
+  Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
   MapPin, Sparkles, ExternalLink, Wifi, WifiOff, AlertTriangle, Download, Gauge,
   GitCompare, History, Settings, Copy, X, FileText,
 } from 'lucide-react'
@@ -107,6 +107,29 @@ function warnaHeatmap(nilai: number | null, m: { ideal: [number, number] | null 
   return `rgba(37, 99, 235, ${0.25 + tNorm * 0.65})`
 }
 
+// Animasi angka: transisi halus dari nilai lama ke nilai baru, bukan loncat langsung
+function useAngkaAnimasi(target: number | null, durasi = 600) {
+  const [tampil, setTampil] = useState<number | null>(target)
+  const ref = useRef<number | null>(target)
+  useEffect(() => {
+    if (target == null) { setTampil(null); ref.current = null; return }
+    const targetPasti: number = target
+    const mulai = ref.current ?? targetPasti
+    const awalWaktu = performance.now()
+    let frame: number
+    function tick(now: number) {
+      const progres = Math.min(1, (now - awalWaktu) / durasi)
+      setTampil(mulai + (targetPasti - mulai) * progres)
+      if (progres < 1) frame = requestAnimationFrame(tick)
+      else ref.current = targetPasti
+    }
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target])
+  return tampil
+}
+
 export default function Dashboard() {
   const [data, setData] = useState<Titik[]>([])
   const [kemarin, setKemarin] = useState<Titik[]>([])
@@ -131,6 +154,7 @@ export default function Dashboard() {
   const [pengaturanTerbuka, setPengaturanTerbuka] = useState(false)
   const [ringkasan, setRingkasan] = useState('')
   const [loadingRingkasan, setLoadingRingkasan] = useState(false)
+  const [loadingAwal, setLoadingAwal] = useState(true)
 
   useEffect(() => {
     setJamSekarang(new Date())
@@ -270,6 +294,7 @@ export default function Dashboard() {
     if (error || !data) return
     setTerbaru(data)
     setWaktuTerbaru(data.created_at)
+    setLoadingAwal(false)
     mintaRekomendasi(data)
   }
 
@@ -413,6 +438,12 @@ export default function Dashboard() {
   const stVPD = hitungStatus(nilaiVPD, idealVPDAktif)
   const anomaliVPD = stVPD.label === 'Perlu Cek'
 
+  const suhuAirAnim = useAngkaAnimasi(terbaru?.suhu_air ?? null)
+  const phAnim = useAngkaAnimasi(terbaru?.ph ?? null)
+  const tdsAnim = useAngkaAnimasi(terbaru?.tds ?? null)
+  const vpdAnim = useAngkaAnimasi(nilaiVPD)
+  const nilaiAnimasi: Record<string, number | null> = { suhu_air: suhuAirAnim, ph: phAnim, tds: tdsAnim }
+
   // Gabungkan data hari ini + overlay kemarin + garis prediksi
   const dataUntukChart = (() => {
     const kemarinMap = new Map<string, number | null>()
@@ -481,14 +512,9 @@ export default function Dashboard() {
 
         {/* Logo bar */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, background: '#15803d',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Sprout color="#fff" size={20} />
-          </div>
-          <span style={{ fontSize: 16, fontWeight: 700, color: dark ? '#e5e7eb' : '#14532d' }}>WIMA FARM</span>
-          <span style={{ fontSize: 13, color: t.sub }}>Greenhouse Melon</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="WIMA FARM" style={{ height: 40, width: 'auto', borderRadius: 8 }} />
+          <span style={{ fontSize: 13, color: t.sub }}>Greenhouse Melon Monitoring</span>
 
           {jamSekarang && (
             <span style={{ marginLeft: 'auto', fontSize: 12, color: t.sub, fontWeight: 500 }}>
@@ -617,10 +643,14 @@ export default function Dashboard() {
                       {m.label}
                       {anomali && <AlertTriangle size={12} color="#fecaca" />}
                     </div>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: anomali ? '#fecaca' : '#fff' }}>
-                      {fmt(nilai, m.desimal)}
-                      <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> {m.satuan}</span>
-                    </div>
+                    {loadingAwal ? (
+                      <div className="pulsing" style={{ width: 64, height: 22, borderRadius: 6, background: 'rgba(255,255,255,0.25)' }} />
+                    ) : (
+                      <div style={{ fontSize: 24, fontWeight: 700, color: anomali ? '#fecaca' : '#fff' }}>
+                        {fmt(nilaiAnimasi[m.key] ?? nilai, m.desimal)}
+                        <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> {m.satuan}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -645,10 +675,14 @@ export default function Dashboard() {
                   VPD
                   {anomaliVPD && <AlertTriangle size={12} color="#fecaca" />}
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: anomaliVPD ? '#fecaca' : '#fff' }}>
-                  {fmt(nilaiVPD, 2)}
-                  <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> kPa</span>
-                </div>
+                {loadingAwal ? (
+                  <div className="pulsing" style={{ width: 64, height: 22, borderRadius: 6, background: 'rgba(255,255,255,0.25)' }} />
+                ) : (
+                  <div style={{ fontSize: 24, fontWeight: 700, color: anomaliVPD ? '#fecaca' : '#fff' }}>
+                    {fmt(vpdAnim ?? nilaiVPD, 2)}
+                    <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> kPa</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -886,7 +920,28 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {metrikGabungan.map((m) => {
+                {loadingAwal ? (
+                  metrikGabungan.map((m) => (
+                    <tr key={m.key} style={{ borderTop: `1px solid ${t.rowBorder}` }}>
+                      <td style={{ padding: '10px 1.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 26, height: 26, borderRadius: 8, background: `${m.warna}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <m.Icon size={14} color={m.warna} />
+                          </div>
+                          {m.label}
+                        </div>
+                      </td>
+                      {[1, 2, 3, 4].map((i) => (
+                        <td key={i} style={{ padding: '10px 12px' }}>
+                          <div className="pulsing" style={{ width: 40, height: 12, borderRadius: 4, background: dark ? 'rgba(255,255,255,0.08)' : '#e5e7eb' }} />
+                        </td>
+                      ))}
+                      <td style={{ padding: '10px 1.5rem' }}>
+                        <div className="pulsing" style={{ width: 60, height: 18, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.08)' : '#e5e7eb' }} />
+                      </td>
+                    </tr>
+                  ))
+                ) : metrikGabungan.map((m) => {
                   const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
                   const st = hitungStatus(nilai, m.ideal)
                   const Icon = m.Icon
@@ -1046,6 +1101,13 @@ export default function Dashboard() {
       </main>
 
       <style jsx>{`
+        @keyframes pulseSkeleton {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.9; }
+        }
+        :global(.pulsing) {
+          animation: pulseSkeleton 1.4s ease-in-out infinite;
+        }
         @media (max-width: 768px) {
           .chart-alert-grid {
             grid-template-columns: 1fr !important;
