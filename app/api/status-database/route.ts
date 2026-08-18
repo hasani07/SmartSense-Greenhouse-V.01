@@ -30,6 +30,8 @@ export async function GET() {
       persen: info.persen,
       ambang: AMBANG_PERSEN,
       backup_terakhir: terbaru ? { nama: terbaru.name, waktu: terbaru.created_at } : null,
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' },
     })
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 })
