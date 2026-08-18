@@ -204,6 +204,14 @@ export default function Dashboard() {
   const [modeKios, setModeKios] = useState(false)
   const [cuacaLuar, setCuacaLuar] = useState<{ suhu: number | null; kelembaban: number | null } | null>(null)
   const [statusDB, setStatusDB] = useState<{ mb_terpakai: number; persen: number; ambang: number; backup_terakhir: { nama: string; waktu: string } | null } | null>(null)
+  const [barTerisi, setBarTerisi] = useState(false)
+
+  useEffect(() => {
+    if (!statusDB) return
+    setBarTerisi(false)
+    const timer = setTimeout(() => setBarTerisi(true), 100)
+    return () => clearTimeout(timer)
+  }, [statusDB?.persen])
   const grafikRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -975,7 +983,7 @@ export default function Dashboard() {
           </span>
           {live && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, background: '#dcfce7', color: '#15803d', fontWeight: 600 }}>
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: '#22c55e', display: 'inline-block' }} />
+              <span className="anim-live-dot" style={{ width: 6, height: 6, borderRadius: 999, background: '#22c55e', display: 'inline-block' }} />
               Live
             </span>
           )}
@@ -1036,7 +1044,10 @@ export default function Dashboard() {
                 </span>
               </div>
               <div style={{ width: '100%', height: 8, borderRadius: 999, background: dark ? '#1f2b25' : '#f3f4f6', overflow: 'hidden', marginBottom: 12 }}>
-                <div style={{ width: `${Math.min(100, statusDB.persen)}%`, height: '100%', background: warnaBar, borderRadius: 999 }} />
+                <div style={{
+                  width: `${barTerisi ? Math.min(100, statusDB.persen) : 0}%`, height: '100%', background: warnaBar, borderRadius: 999,
+                  transition: 'width 1s ease-out',
+                }} />
               </div>
               <div style={{ fontSize: 12, color: t.sub }}>
                 {statusDB.backup_terakhir
@@ -1223,11 +1234,11 @@ export default function Dashboard() {
                   />
                   {modeSemua ? (
                     metrikGabungan.filter((m) => metrikDipilih.has(m.key)).map((m) => (
-                      <Line key={m.key} yAxisId="kiri" type="monotone" dataKey={m.key} stroke={m.warna} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                      <Line key={m.key} yAxisId="kiri" type="monotone" dataKey={m.key} stroke={m.warna} strokeWidth={2} dot={false} connectNulls isAnimationActive={true} animationDuration={700} />
                     ))
                   ) : (
                     <>
-                      <Line yAxisId="kiri" type="monotone" dataKey={grafik} stroke="#34d399" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
+                      <Line yAxisId="kiri" type="monotone" dataKey={grafik} stroke="#34d399" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={true} animationDuration={700} />
                       <Line yAxisId="kiri" type="monotone" dataKey="prediksi" stroke="#facc15" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls isAnimationActive={false} />
                       {tampilkanKemarin && (
                         <Line yAxisId="kiri" type="monotone" dataKey="kemarinNilai" stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="2 4" dot={false} connectNulls isAnimationActive={false} />
@@ -1392,11 +1403,11 @@ export default function Dashboard() {
                       <td style={{ padding: '10px 12px', color: t.sub }}>{fmt(max, m.desimal)}</td>
                       <td style={{ padding: '10px 1.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, color: st.warna, background: st.bg }}>
+                          <span className={st.label === 'Perlu Cek' ? 'anim-blink-warn' : ''} style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, color: st.warna, background: st.bg }}>
                             {st.label}
                           </span>
                           {isMacet && (
-                            <span style={{
+                            <span className="anim-blink-warn" style={{
                               fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 999,
                               color: '#b91c1c', background: '#fee2e2', display: 'inline-flex', alignItems: 'center', gap: 3,
                             }}>
@@ -1621,6 +1632,22 @@ export default function Dashboard() {
         :global(.anim-gauge) {
           animation: animTickGauge 2.2s ease-in-out infinite;
           transform-origin: bottom center;
+        }
+
+        @keyframes animLiveDot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.4; transform: scale(0.85); }
+        }
+        :global(.anim-live-dot) {
+          animation: animLiveDot 1.5s ease-in-out infinite;
+        }
+
+        @keyframes animBlinkWarn {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.45; }
+        }
+        :global(.anim-blink-warn) {
+          animation: animBlinkWarn 1.6s ease-in-out infinite;
         }
 
         @media (max-width: 768px) {
