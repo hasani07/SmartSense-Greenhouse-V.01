@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/arsip",
+      "schedule": "0 0 * * *"
+    }
+  ]
+}
