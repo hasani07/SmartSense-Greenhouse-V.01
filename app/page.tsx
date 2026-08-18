@@ -838,18 +838,19 @@ export default function Dashboard() {
           color: '#fff', position: 'relative', overflow: 'hidden',
         }}>
           <h1 style={{ fontSize: 'clamp(26px, 3vw, 36px)', fontWeight: 700, margin: '0 0 28px' }}>Overview</h1>
-          <div style={{ display: 'flex', gap: 'clamp(24px, 5vw, 56px)', flexWrap: 'wrap' }}>
+          <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 'clamp(14px, 2vw, 24px)' }}>
             {hero.map((m) => {
               const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
               const Icon = m.Icon
               const anomali = hitungStatus(nilai, m.ideal).label === 'Perlu Cek'
               return (
                 <div key={m.key} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: anomali ? '8px 16px 8px 8px' : 0,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '8px 10px',
                   borderRadius: 14,
                   background: anomali ? 'rgba(248,113,113,0.16)' : 'transparent',
                   border: anomali ? '1px solid rgba(248,113,113,0.4)' : '1px solid transparent',
+                  minWidth: 0,
                 }}>
                   <div style={{
                     width: 42, height: 42, borderRadius: 12,
@@ -858,8 +859,8 @@ export default function Dashboard() {
                   }}>
                     <Icon size={20} color={anomali ? '#fecaca' : '#fff'} />
                   </div>
-                  <div>
-                    <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
                       {m.label}
                       {anomali && <AlertTriangle size={12} color="#fecaca" />}
                     </div>
@@ -889,11 +890,12 @@ export default function Dashboard() {
             })}
 
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: anomaliVPD ? '8px 16px 8px 8px' : 0,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px',
               borderRadius: 14,
               background: anomaliVPD ? 'rgba(248,113,113,0.16)' : 'transparent',
               border: anomaliVPD ? '1px solid rgba(248,113,113,0.4)' : '1px solid transparent',
+              minWidth: 0,
             }}>
               <div style={{
                 width: 42, height: 42, borderRadius: 12,
@@ -902,8 +904,8 @@ export default function Dashboard() {
               }}>
                 <Gauge size={20} color={anomaliVPD ? '#fecaca' : '#fff'} />
               </div>
-              <div>
-                <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
                   VPD
                   {anomaliVPD && <AlertTriangle size={12} color="#fecaca" />}
                 </div>
@@ -963,6 +965,16 @@ export default function Dashboard() {
                 background: 'rgba(255,255,255,0.15)', fontWeight: 600,
               }}>
                 Uptime 24 jam: {uptime}%
+              </span>
+            )}
+            {statusDB && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
+                background: 'rgba(255,255,255,0.15)', fontWeight: 600,
+                color: statusDB.persen >= statusDB.ambang ? '#fca5a5' : statusDB.persen >= 60 ? '#facc15' : '#a3e635',
+              }}>
+                <Database size={12} />
+                DB {statusDB.mb_terpakai} MB ({statusDB.persen}%)
               </span>
             )}
             {terbaru?.firmware_version && (
@@ -1471,6 +1483,9 @@ export default function Dashboard() {
         @media (max-width: 768px) {
           .chart-alert-grid {
             grid-template-columns: 1fr !important;
+          }
+          .hero-grid {
+            grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           }
         }
         @media (max-width: 480px) {
