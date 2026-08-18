@@ -10,7 +10,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const AMBANG_PERSEN = 80   // mulai arsip kalau database sudah kepakai segini %
+const AMBANG_PERSEN = 50   // mulai arsip kalau database sudah kepakai segini %
 const SIMPAN_HARI = 7      // data yang lebih baru dari ini TETAP disimpan di database
 
 export async function GET(req: Request) {
