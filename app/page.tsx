@@ -37,12 +37,12 @@ const LOKASI = { lat: -7.713542, lng: 110.440141 }
 
 const METRIK = [
   { key: 'suhu_air',   label: 'Suhu Air',    satuan: '°C',  desimal: 1, warna: '#0e7490', ideal: [20, 28] as [number, number] | null, Icon: Thermometer },
-  { key: 'ph',         label: 'pH',          satuan: '',    desimal: 2, warna: '#7c3aed', ideal: [5.8, 6.8] as [number, number] | null, Icon: FlaskConical },
+  { key: 'ph',         label: 'pH',          satuan: '',    desimal: 2, warna: '#6366f1', ideal: [5.8, 6.8] as [number, number] | null, Icon: FlaskConical },
   { key: 'tds',        label: 'TDS',         satuan: 'ppm', desimal: 0, warna: '#0f766e', ideal: [400, 1200] as [number, number] | null, Icon: Droplets },
   { key: 'jarak',      label: 'Ketinggian',  satuan: 'cm',  desimal: 1, warna: '#2563eb', ideal: null, Icon: Waves },
-  { key: 'suhu_udara', label: 'Suhu Udara',  satuan: '°C',  desimal: 1, warna: '#c2410c', ideal: [24, 32] as [number, number] | null, Icon: Wind },
+  { key: 'suhu_udara', label: 'Suhu Udara',  satuan: '°C',  desimal: 1, warna: '#ea580c', ideal: [24, 32] as [number, number] | null, Icon: Wind },
   { key: 'hum_udara',  label: 'Kelembaban',  satuan: '%',   desimal: 1, warna: '#15803d', ideal: [50, 80] as [number, number] | null, Icon: Droplets },
-  { key: 'lux',        label: 'Cahaya',      satuan: 'lux', desimal: 0, warna: '#a16207', ideal: null, Icon: Sun },
+  { key: 'lux',        label: 'Cahaya',      satuan: 'lux', desimal: 0, warna: '#ca8a04', ideal: null, Icon: Sun },
 ] as const
 
 const RENTANG = [
@@ -89,7 +89,7 @@ function animasiIkon(key: string): string {
 
 function kekuatanSinyal(rssi: number | null | undefined) {
   if (rssi == null) return null
-  if (rssi >= -60) return { label: 'Kuat', warna: '#a3e635', Icon: SignalHigh }
+  if (rssi >= -60) return { label: 'Kuat', warna: '#34d399', Icon: SignalHigh }
   if (rssi >= -75) return { label: 'Sedang', warna: '#facc15', Icon: SignalMedium }
   return { label: 'Buruk', warna: '#fca5a5', Icon: SignalLow }
 }
@@ -137,7 +137,7 @@ function prediksiTren(nilai: number[], jumlahPrediksi: number): number[] {
 }
 
 function warnaHeatmap(nilai: number | null, m: { ideal: [number, number] | null }, semuaNilai: number[]) {
-  if (nilai == null) return '#e5e7eb'
+  if (nilai == null) return '#f4f4f5'
   if (m.ideal) {
     const [lo, hi] = m.ideal
     return nilai >= lo && nilai <= hi ? '#4ade80' : '#fb923c'
@@ -689,8 +689,8 @@ export default function Dashboard() {
   })()
 
   const t = dark
-    ? { bg: '#0b1210', card: '#111c17', border: '#1f2b25', text: '#e5e7eb', sub: '#9ca3af', headRow: '#6b7280', rowBorder: '#1f2b25' }
-    : { bg: '#f4f6f2', card: '#ffffff', border: '#e5e7eb', text: '#111827', sub: '#6b7280', headRow: '#9ca3af', rowBorder: '#f4f4f2' }
+    ? { bg: '#09090b', card: '#18181b', border: '#27272a', text: '#f4f4f5', sub: '#a1a1aa', headRow: '#71717a', rowBorder: '#27272a' }
+    : { bg: '#f8fafc', card: '#ffffff', border: '#e2e8f0', text: '#0f172a', sub: '#64748b', headRow: '#94a3b8', rowBorder: '#f1f5f9' }
 
   return (
     <div style={{ background: t.bg, minHeight: '100vh', transition: 'background 0.2s' }}>
@@ -722,7 +722,7 @@ export default function Dashboard() {
             }}
             aria-label="Pengaturan rentang ideal"
           >
-            <Settings size={16} color={dark ? '#e5e7eb' : '#374151'} />
+            <Settings size={16} color={dark ? '#f4f4f5' : '#374151'} />
           </button>
 
           <button
@@ -734,7 +734,7 @@ export default function Dashboard() {
             }}
             aria-label="Mode presentasi/kios"
           >
-            {modeKios ? <Minimize size={16} color="#fff" /> : <Maximize size={16} color={dark ? '#e5e7eb' : '#374151'} />}
+            {modeKios ? <Minimize size={16} color="#fff" /> : <Maximize size={16} color={dark ? '#f4f4f5' : '#374151'} />}
           </button>
 
           <button
@@ -754,7 +754,7 @@ export default function Dashboard() {
         {pengaturanTerbuka && (
           <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Settings size={16} /> Pengaturan Rentang Ideal
               </span>
               <button onClick={() => setPengaturanTerbuka(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: t.sub }}>
@@ -848,7 +848,7 @@ export default function Dashboard() {
         {/* HERO */}
         <section style={{
           borderRadius: 24, padding: 'clamp(1.5rem, 4vw, 2.5rem)', marginBottom: '1.25rem',
-          background: 'linear-gradient(135deg, #14532d, #15803d 60%, #4d7c0f)',
+          background: 'linear-gradient(135deg, #14532d, #15803d 60%, #10b981)',
           color: '#fff', position: 'relative', overflow: 'hidden',
         }}>
           <h1 style={{ fontSize: 'clamp(26px, 3vw, 36px)', fontWeight: 700, margin: '0 0 28px' }}>Overview</h1>
@@ -891,7 +891,7 @@ export default function Dashboard() {
                             <polyline
                               points={titikSparkline(data.slice(-20).map((d) => (d as any)[m.key] ?? null), 70, 20)}
                               fill="none"
-                              stroke={anomali ? '#fecaca' : '#a3e635'}
+                              stroke={anomali ? '#fecaca' : '#34d399'}
                               strokeWidth="1.5"
                             />
                           </svg>
@@ -939,7 +939,7 @@ export default function Dashboard() {
                             70, 20
                           )}
                           fill="none"
-                          stroke={anomaliVPD ? '#fecaca' : '#a3e635'}
+                          stroke={anomaliVPD ? '#fecaca' : '#34d399'}
                           strokeWidth="1.5"
                         />
                       </svg>
@@ -959,7 +959,7 @@ export default function Dashboard() {
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
               background: online ? 'rgba(163,230,53,0.2)' : 'rgba(248,113,113,0.2)',
-              color: online ? '#a3e635' : '#fca5a5', fontWeight: 600,
+              color: online ? '#34d399' : '#fca5a5', fontWeight: 600,
             }}>
               {online ? <Wifi size={12} /> : <WifiOff size={12} />}
               {online ? 'Online' : 'Offline'}
@@ -967,9 +967,9 @@ export default function Dashboard() {
             {live && (
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
-                background: 'rgba(163,230,53,0.15)', color: '#a3e635', fontWeight: 600,
+                background: 'rgba(163,230,53,0.15)', color: '#34d399', fontWeight: 600,
               }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#a3e635', display: 'inline-block' }} />
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#34d399', display: 'inline-block' }} />
                 Live
               </span>
             )}
@@ -985,7 +985,7 @@ export default function Dashboard() {
               <span style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
                 background: 'rgba(255,255,255,0.15)', fontWeight: 600,
-                color: statusDB.persen >= statusDB.ambang ? '#fca5a5' : statusDB.persen >= 60 ? '#facc15' : '#a3e635',
+                color: statusDB.persen >= statusDB.ambang ? '#fca5a5' : statusDB.persen >= 60 ? '#facc15' : '#34d399',
               }}>
                 <Database size={12} />
                 DB {statusDB.mb_terpakai} MB ({statusDB.persen}%)
@@ -1027,8 +1027,8 @@ export default function Dashboard() {
           return (
             <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <Database size={16} color={dark ? '#e5e7eb' : '#14532d'} />
-                <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>Status Database &amp; Backup</span>
+                <Database size={16} color={dark ? '#f4f4f5' : '#14532d'} />
+                <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d' }}>Status Database &amp; Backup</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: t.sub, marginBottom: 4 }}>
                 <span>Pemakaian database</span>
@@ -1163,9 +1163,9 @@ export default function Dashboard() {
                       }
                       return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, aktif.label]
                     }}
-                    contentStyle={{ background: '#0f3d20', border: 'none', borderRadius: 8, fontSize: 12 }}
+                    contentStyle={{ background: '#052e21', border: 'none', borderRadius: 8, fontSize: 12 }}
                   />
-                  <Line yAxisId="kiri" type="monotone" dataKey={grafik} stroke="#a3e635" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
+                  <Line yAxisId="kiri" type="monotone" dataKey={grafik} stroke="#34d399" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
                   <Line yAxisId="kiri" type="monotone" dataKey="prediksi" stroke="#facc15" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls isAnimationActive={false} />
                   {tampilkanKemarin && (
                     <Line yAxisId="kiri" type="monotone" dataKey="kemarinNilai" stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="2 4" dot={false} connectNulls isAnimationActive={false} />
@@ -1184,10 +1184,10 @@ export default function Dashboard() {
             </p>
           </div>
 
-          <div style={{ borderRadius: 20, padding: 'clamp(1.25rem, 2vw, 1.75rem)', background: '#fef9c3', border: '1px solid #fde68a' }}>
+          <div style={{ borderRadius: 20, padding: 'clamp(1.25rem, 2vw, 1.75rem)', background: '#eef2ff', border: '1px solid #c7d2fe' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-              <span style={{ fontSize: 15, fontWeight: 600, color: '#78350f', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Sparkles size={18} color="#b45309" /> Rekomendasi AI
+              <span style={{ fontSize: 15, fontWeight: 600, color: '#3730a3', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Sparkles size={18} color="#4f46e5" /> Rekomendasi AI
               </span>
               <button
                 onClick={() => terbaru && mintaRekomendasi(terbaru)}
@@ -1195,14 +1195,14 @@ export default function Dashboard() {
                 style={{
                   fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8,
                   cursor: (loadingRekomendasi || !terbaru) ? 'default' : 'pointer',
-                  border: '1px solid #b45309', background: '#fff', color: '#b45309',
+                  border: '1px solid #4f46e5', background: '#fff', color: '#4f46e5',
                   opacity: (loadingRekomendasi || !terbaru) ? 0.6 : 1,
                 }}
               >
                 {loadingRekomendasi ? 'Memuat...' : 'Get Data & Rekomendasi'}
               </button>
             </div>
-            <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
+            <div style={{ fontSize: 13, color: '#3730a3', lineHeight: 1.7, whiteSpace: 'pre-line' }}>
               {loadingRekomendasi
                 ? 'Menganalisis data sensor...'
                 : (rekomendasi || 'Klik tombol di atas untuk mengambil data terbaru dan membuat rekomendasi.')}
@@ -1213,8 +1213,8 @@ export default function Dashboard() {
         {/* Riwayat anomali */}
         <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <History size={16} color={dark ? '#e5e7eb' : '#14532d'} />
-            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>
+            <History size={16} color={dark ? '#f4f4f5' : '#14532d'} />
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d' }}>
               Riwayat Anomali -- {aktif.label}
             </span>
             <span style={{ fontWeight: 400, fontSize: 12, color: t.sub }}>({rentangAktif.label} terakhir)</span>
@@ -1245,7 +1245,7 @@ export default function Dashboard() {
             padding: '1rem 1.5rem', borderBottom: `1px solid ${t.rowBorder}`,
             display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8,
           }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d' }}>
               Status &amp; Statistik Sensor <span style={{ fontWeight: 400, fontSize: 12, color: t.sub }}>({rentangAktif.label} terakhir)</span>
             </span>
             <button
@@ -1255,7 +1255,7 @@ export default function Dashboard() {
                 display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
                 padding: '6px 12px', borderRadius: 8, cursor: mengekspor ? 'default' : 'pointer',
                 border: `1px solid ${t.border}`, background: dark ? '#1f2b25' : '#f0fdf4',
-                color: dark ? '#a3e635' : '#15803d', opacity: mengekspor ? 0.6 : 1,
+                color: dark ? '#34d399' : '#15803d', opacity: mengekspor ? 0.6 : 1,
               }}
             >
               <Download size={13} />
@@ -1288,11 +1288,11 @@ export default function Dashboard() {
                       </td>
                       {[1, 2, 3, 4].map((i) => (
                         <td key={i} style={{ padding: '10px 12px' }}>
-                          <div className="pulsing" style={{ width: 40, height: 12, borderRadius: 4, background: dark ? 'rgba(255,255,255,0.08)' : '#e5e7eb' }} />
+                          <div className="pulsing" style={{ width: 40, height: 12, borderRadius: 4, background: dark ? 'rgba(255,255,255,0.08)' : '#f4f4f5' }} />
                         </td>
                       ))}
                       <td style={{ padding: '10px 1.5rem' }}>
-                        <div className="pulsing" style={{ width: 60, height: 18, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.08)' : '#e5e7eb' }} />
+                        <div className="pulsing" style={{ width: 60, height: 18, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.08)' : '#f4f4f5' }} />
                       </td>
                     </tr>
                   ))
@@ -1353,7 +1353,7 @@ export default function Dashboard() {
         {/* Ringkasan naratif AI */}
         <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d', display: 'flex', alignItems: 'center', gap: 8 }}>
               <FileText size={16} /> Ringkasan Naratif (AI)
             </span>
             <button
@@ -1362,7 +1362,7 @@ export default function Dashboard() {
               style={{
                 fontSize: 12, fontWeight: 600, padding: '6px 12px', borderRadius: 8, cursor: loadingRingkasan ? 'default' : 'pointer',
                 border: `1px solid ${t.border}`, background: dark ? '#1f2b25' : '#f0fdf4',
-                color: dark ? '#a3e635' : '#15803d', opacity: loadingRingkasan ? 0.6 : 1,
+                color: dark ? '#34d399' : '#15803d', opacity: loadingRingkasan ? 0.6 : 1,
               }}
             >
               {loadingRingkasan ? 'Menulis...' : `Buat Ringkasan (${rentangAktif.label})`}
@@ -1394,7 +1394,7 @@ export default function Dashboard() {
         {/* Heatmap kalender */}
         <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
           <div style={{ marginBottom: 10 }}>
-            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d' }}>
               Peta Kalender -- {aktif.label}
             </span>
             <span style={{ fontWeight: 400, fontSize: 12, color: t.sub, marginLeft: 6 }}>
@@ -1423,8 +1423,8 @@ export default function Dashboard() {
         {cuacaLuar && (
           <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-              <CloudSun size={16} color={dark ? '#e5e7eb' : '#14532d'} />
-              <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>Cuaca Luar vs Greenhouse</span>
+              <CloudSun size={16} color={dark ? '#f4f4f5' : '#14532d'} />
+              <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d' }}>Cuaca Luar vs Greenhouse</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
               <div>
@@ -1453,8 +1453,8 @@ export default function Dashboard() {
         {/* Peta lokasi */}
         <section style={{ borderRadius: 20, border: `1px solid ${t.border}`, overflow: 'hidden', background: t.card }}>
           <div style={{ padding: '1rem 1.5rem', borderBottom: `1px solid ${t.rowBorder}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <MapPin size={16} color={dark ? '#a3e635' : '#14532d'} />
-            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>Lokasi Greenhouse</span>
+            <MapPin size={16} color={dark ? '#34d399' : '#14532d'} />
+            <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#f4f4f5' : '#14532d' }}>Lokasi Greenhouse</span>
           </div>
           <div style={{ position: 'relative' }}>
             <iframe
@@ -1478,7 +1478,7 @@ export default function Dashboard() {
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${LOKASI.lat}%2C${LOKASI.lng}`}
               target="_blank" rel="noreferrer"
-              style={{ color: dark ? '#a3e635' : '#15803d', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              style={{ color: dark ? '#34d399' : '#15803d', display: 'inline-flex', alignItems: 'center', gap: 4 }}
             >
               Buka di Google Maps <ExternalLink size={12} />
             </a>
