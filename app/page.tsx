@@ -177,6 +177,8 @@ export default function Dashboard() {
   const [kemarin, setKemarin] = useState<Titik[]>([])
   const [tampilkanKemarin, setTampilkanKemarin] = useState(false)
   const [pembanding, setPembanding] = useState<string>('')
+  const [modeSemua, setModeSemua] = useState(false)
+  const [metrikDipilih, setMetrikDipilih] = useState<Set<string>>(new Set(METRIK.map((m) => m.key)))
   const [stats, setStats] = useState<Stats>({})
   const [heatmap, setHeatmap] = useState<Titik[]>([])
   const [macet, setMacet] = useState<Record<string, boolean>>({})
@@ -663,6 +665,36 @@ export default function Dashboard() {
     return base
   })()
 
+  // Data ternormalisasi (0-1) untuk mode "Tampilkan Semua" -- supaya sensor dengan
+  // satuan/rentang jauh berbeda (misal pH ~6 vs lux ~15000) tetap bisa dibandingkan bentuk trennya.
+  const dataSemuaNormal = (() => {
+    if (data.length === 0) return []
+    const minMax: Record<string, { min: number; max: number }> = {}
+    METRIK.forEach((m) => {
+      const nilai = data.map((d) => (d as any)[m.key]).filter((v: any) => v != null) as number[]
+      if (nilai.length > 0) minMax[m.key] = { min: Math.min(...nilai), max: Math.max(...nilai) }
+    })
+    return data.map((d) => {
+      const baris: any = { bucket: d.bucket }
+      METRIK.forEach((m) => {
+        const v = (d as any)[m.key]
+        if (v == null || !minMax[m.key]) { baris[m.key] = null; return }
+        const { min, max } = minMax[m.key]
+        baris[m.key] = max > min ? (v - min) / (max - min) : 0.5
+      })
+      return baris
+    })
+  })()
+
+  function toggleMetrikDipilih(key: string) {
+    setMetrikDipilih((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   // Riwayat anomali untuk metrik yang sedang ditampilkan di grafik
   const riwayatAnomali = (() => {
     if (!aktif.ideal) return []
@@ -845,180 +877,147 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* HERO */}
-        <section style={{
-          borderRadius: 24, padding: 'clamp(1.5rem, 4vw, 2.5rem)', marginBottom: '1.25rem',
-          background: 'linear-gradient(135deg, #14532d, #15803d 60%, #10b981)',
-          color: '#fff', position: 'relative', overflow: 'hidden',
-        }}>
-          <h1 style={{ fontSize: 'clamp(26px, 3vw, 36px)', fontWeight: 700, margin: '0 0 28px' }}>Overview</h1>
-          <div className="hero-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 'clamp(14px, 2vw, 24px)' }}>
-            {hero.map((m) => {
-              const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
-              const Icon = m.Icon
-              const anomali = hitungStatus(nilai, m.ideal).label === 'Perlu Cek'
-              return (
-                <div key={m.key} style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '8px 10px',
-                  borderRadius: 14,
-                  background: anomali ? 'rgba(248,113,113,0.16)' : 'transparent',
-                  border: anomali ? '1px solid rgba(248,113,113,0.4)' : '1px solid transparent',
-                  minWidth: 0,
-                }}>
-                  <div style={{
-                    width: 42, height: 42, borderRadius: 12,
-                    background: anomali ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.15)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                  }}>
-                    <Icon size={20} color={anomali ? '#fecaca' : '#fff'} className={animasiIkon(m.key)} />
-                  </div>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-                      {m.label}
-                      {anomali && <AlertTriangle size={12} color="#fecaca" />}
-                    </div>
-                    {loadingAwal ? (
-                      <div className="pulsing" style={{ width: 64, height: 22, borderRadius: 6, background: 'rgba(255,255,255,0.25)' }} />
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: anomali ? '#fecaca' : '#fff' }}>
-                          {fmt(nilaiAnimasi[m.key] ?? nilai, m.desimal)}
-                          <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> {m.satuan}</span>
-                        </div>
-                        {data.length > 1 && (
-                          <svg width="70" height="20" viewBox="0 0 70 20" style={{ marginTop: 2, opacity: 0.7 }}>
-                            <polyline
-                              points={titikSparkline(data.slice(-20).map((d) => (d as any)[m.key] ?? null), 70, 20)}
-                              fill="none"
-                              stroke={anomali ? '#fecaca' : '#34d399'}
-                              strokeWidth="1.5"
-                            />
-                          </svg>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+        {/* HEADER */}
+        <section style={{ marginBottom: '1.25rem' }}>
+          <h1 style={{ fontSize: 'clamp(24px, 3vw, 32px)', fontWeight: 700, color: t.text, margin: 0 }}>Dashboard</h1>
+          <p style={{ fontSize: 13, color: t.sub, margin: '4px 0 0' }}>Ringkasan kondisi WIMA FARM secara real-time.</p>
+        </section>
 
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '8px 10px',
-              borderRadius: 14,
-              background: anomaliVPD ? 'rgba(248,113,113,0.16)' : 'transparent',
-              border: anomaliVPD ? '1px solid rgba(248,113,113,0.4)' : '1px solid transparent',
-              minWidth: 0,
-            }}>
-              <div style={{
-                width: 42, height: 42, borderRadius: 12,
-                background: anomaliVPD ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.15)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        {/* GRID KARTU METRIK */}
+        <section className="hero-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 'clamp(12px, 2vw, 18px)', marginBottom: '1.25rem' }}>
+          {hero.map((m) => {
+            const nilai = terbaru?.[m.key as keyof Titik] as number | null | undefined
+            const Icon = m.Icon
+            const st = hitungStatus(nilai, m.ideal)
+            const anomali = st.label === 'Perlu Cek'
+            return (
+              <div key={m.key} style={{
+                background: t.card, borderRadius: 16, padding: '1rem',
+                border: `1px solid ${anomali ? '#fca5a5' : t.border}`,
+                boxShadow: dark ? 'none' : '0 1px 3px rgba(0,0,0,0.04)',
               }}>
-                <Gauge size={20} color={anomaliVPD ? '#fecaca' : '#fff'} className="anim-gauge" />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
-                  VPD
-                  {anomaliVPD && <AlertTriangle size={12} color="#fecaca" />}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: `${m.warna}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Icon size={19} color={m.warna} className={animasiIkon(m.key)} />
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: t.sub }}>{m.label}</span>
                 </div>
                 {loadingAwal ? (
-                  <div className="pulsing" style={{ width: 64, height: 22, borderRadius: 6, background: 'rgba(255,255,255,0.25)' }} />
+                  <div className="pulsing" style={{ width: 64, height: 26, borderRadius: 6, background: t.rowBorder }} />
                 ) : (
                   <>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: anomaliVPD ? '#fecaca' : '#fff' }}>
-                      {fmt(vpdAnim ?? nilaiVPD, 2)}
-                      <span style={{ fontSize: 14, fontWeight: 400, opacity: 0.8 }}> kPa</span>
+                    <div style={{ fontSize: 25, fontWeight: 700, color: t.text }}>
+                      {fmt(nilaiAnimasi[m.key] ?? nilai, m.desimal)}
+                      <span style={{ fontSize: 13, fontWeight: 400, color: t.sub }}> {m.satuan}</span>
                     </div>
                     {data.length > 1 && (
-                      <svg width="70" height="20" viewBox="0 0 70 20" style={{ marginTop: 2, opacity: 0.7 }}>
+                      <svg width="90" height="22" viewBox="0 0 90 22" style={{ marginTop: 4, display: 'block' }}>
                         <polyline
-                          points={titikSparkline(
-                            data.slice(-20).map((d) => hitungVPD((d as any).suhu_udara, (d as any).hum_udara)),
-                            70, 20
-                          )}
-                          fill="none"
-                          stroke={anomaliVPD ? '#fecaca' : '#34d399'}
-                          strokeWidth="1.5"
+                          points={titikSparkline(data.slice(-20).map((d) => (d as any)[m.key] ?? null), 90, 22)}
+                          fill="none" stroke={m.warna} strokeWidth="1.5"
                         />
                       </svg>
                     )}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 11, color: t.sub }}>
+                      <span style={{ width: 6, height: 6, borderRadius: 999, background: !m.ideal ? '#94a3b8' : anomali ? '#ef4444' : '#22c55e', flexShrink: 0 }} />
+                      {m.ideal ? `Ideal ${m.ideal[0]} - ${m.ideal[1]}` : 'Normal'}
+                    </div>
                   </>
                 )}
               </div>
-            </div>
-          </div>
+            )
+          })}
 
           <div style={{
-            position: 'absolute', right: -10, top: -10, width: 160, height: 160, borderRadius: '50%',
-            background: 'rgba(255,255,255,0.08)',
-          }} />
-
-          <div style={{ marginTop: 24, display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, opacity: 0.9, flexWrap: 'wrap' }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
-              background: online ? 'rgba(163,230,53,0.2)' : 'rgba(248,113,113,0.2)',
-              color: online ? '#34d399' : '#fca5a5', fontWeight: 600,
-            }}>
-              {online ? <Wifi size={12} /> : <WifiOff size={12} />}
-              {online ? 'Online' : 'Offline'}
-            </span>
-            {live && (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
-                background: 'rgba(163,230,53,0.15)', color: '#34d399', fontWeight: 600,
-              }}>
-                <span style={{ width: 6, height: 6, borderRadius: 999, background: '#34d399', display: 'inline-block' }} />
-                Live
-              </span>
+            background: t.card, borderRadius: 16, padding: '1rem',
+            border: `1px solid ${anomaliVPD ? '#fca5a5' : t.border}`,
+            boxShadow: dark ? 'none' : '0 1px 3px rgba(0,0,0,0.04)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(13,148,136,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <Gauge size={19} color="#0d9488" className="anim-gauge" />
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600, color: t.sub }}>VPD</span>
+            </div>
+            {loadingAwal ? (
+              <div className="pulsing" style={{ width: 64, height: 26, borderRadius: 6, background: t.rowBorder }} />
+            ) : (
+              <>
+                <div style={{ fontSize: 25, fontWeight: 700, color: t.text }}>
+                  {fmt(vpdAnim ?? nilaiVPD, 2)}
+                  <span style={{ fontSize: 13, fontWeight: 400, color: t.sub }}> kPa</span>
+                </div>
+                {data.length > 1 && (
+                  <svg width="90" height="22" viewBox="0 0 90 22" style={{ marginTop: 4, display: 'block' }}>
+                    <polyline
+                      points={titikSparkline(data.slice(-20).map((d) => hitungVPD((d as any).suhu_udara, (d as any).hum_udara)), 90, 22)}
+                      fill="none" stroke="#0d9488" strokeWidth="1.5"
+                    />
+                  </svg>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 11, color: t.sub }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 999, background: anomaliVPD ? '#ef4444' : '#22c55e', flexShrink: 0 }} />
+                  Ideal {idealVPDAktif[0]} - {idealVPDAktif[1]}
+                </div>
+              </>
             )}
-            {uptime != null && (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 999,
-                background: 'rgba(255,255,255,0.15)', fontWeight: 600,
-              }}>
-                Uptime 24 jam: {uptime}%
-              </span>
-            )}
-            {statusDB && (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
-                background: 'rgba(255,255,255,0.15)', fontWeight: 600,
-                color: statusDB.persen >= statusDB.ambang ? '#fca5a5' : statusDB.persen >= 60 ? '#facc15' : '#34d399',
-              }}>
-                <Database size={12} />
-                DB {statusDB.mb_terpakai} MB ({statusDB.persen}%)
-              </span>
-            )}
-            {terbaru?.firmware_version && (
-              <span style={{
-                display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 999,
-                background: 'rgba(255,255,255,0.15)', fontWeight: 600,
-              }}>
-                Firmware v{terbaru.firmware_version}
-              </span>
-            )}
-            {(() => {
-              const sinyal = kekuatanSinyal(terbaru?.rssi)
-              if (!sinyal) return null
-              const SIcon = sinyal.Icon
-              return (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999,
-                  background: 'rgba(255,255,255,0.15)', fontWeight: 600, color: sinyal.warna,
-                }}>
-                  <SIcon size={12} />
-                  Sinyal {sinyal.label} ({terbaru?.rssi} dBm)
-                </span>
-              )
-            })()}
-            <span style={{ opacity: 0.75 }}>
-              {waktuTerbaru
-                ? `Data terakhir ${new Date(waktuTerbaru).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
-                : 'Menunggu data dari perangkat'}
-            </span>
           </div>
+        </section>
+
+        {/* BADGE STATUS */}
+        <section style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, flexWrap: 'wrap', marginBottom: '1.25rem' }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+            background: online ? '#dcfce7' : '#fee2e2', color: online ? '#15803d' : '#dc2626', fontWeight: 600,
+          }}>
+            {online ? <Wifi size={12} /> : <WifiOff size={12} />}
+            {online ? 'Online' : 'Offline'}
+          </span>
+          {live && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999, background: '#dcfce7', color: '#15803d', fontWeight: 600 }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: '#22c55e', display: 'inline-block' }} />
+              Live
+            </span>
+          )}
+          {uptime != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 999, background: t.card, border: `1px solid ${t.border}`, color: t.text, fontWeight: 600 }}>
+              Uptime 24 jam: {uptime}%
+            </span>
+          )}
+          {statusDB && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+              background: t.card, border: `1px solid ${t.border}`, fontWeight: 600,
+              color: statusDB.persen >= statusDB.ambang ? '#dc2626' : statusDB.persen >= 60 ? '#d97706' : '#15803d',
+            }}>
+              <Database size={12} />
+              DB {statusDB.mb_terpakai} MB ({statusDB.persen}%)
+            </span>
+          )}
+          {terbaru?.firmware_version && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 999, background: t.card, border: `1px solid ${t.border}`, color: t.text, fontWeight: 600 }}>
+              Firmware v{terbaru.firmware_version}
+            </span>
+          )}
+          {(() => {
+            const sinyal = kekuatanSinyal(terbaru?.rssi)
+            if (!sinyal) return null
+            const SIcon = sinyal.Icon
+            return (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+                background: t.card, border: `1px solid ${t.border}`, fontWeight: 600, color: sinyal.warna,
+              }}>
+                <SIcon size={12} />
+                Sinyal {sinyal.label} ({terbaru?.rssi} dBm)
+              </span>
+            )
+          })()}
+          <span style={{ color: t.sub }}>
+            {waktuTerbaru
+              ? `Data terakhir ${new Date(waktuTerbaru).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}`
+              : 'Menunggu data dari perangkat'}
+          </span>
         </section>
 
         {/* Status database & backup */}
@@ -1080,7 +1079,27 @@ export default function Dashboard() {
                   <ImageDown size={11} /> PNG
                 </button>
               </span>
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: 2, background: 'rgba(255,255,255,0.1)', borderRadius: 999, padding: 2, marginRight: 6 }}>
+                  <button
+                    onClick={() => setModeSemua(false)}
+                    style={{
+                      fontSize: 11, padding: '3px 9px', borderRadius: 999, cursor: 'pointer', border: 'none',
+                      background: !modeSemua ? '#fff' : 'transparent', color: !modeSemua ? '#14532d' : '#fff', fontWeight: !modeSemua ? 700 : 400,
+                    }}
+                  >
+                    Satu-satu
+                  </button>
+                  <button
+                    onClick={() => setModeSemua(true)}
+                    style={{
+                      fontSize: 11, padding: '3px 9px', borderRadius: 999, cursor: 'pointer', border: 'none',
+                      background: modeSemua ? '#fff' : 'transparent', color: modeSemua ? '#14532d' : '#fff', fontWeight: modeSemua ? 700 : 400,
+                    }}
+                  >
+                    Tampilkan Semua
+                  </button>
+                </div>
                 {RENTANG.map((r) => (
                   <button
                     key={r.key}
@@ -1098,63 +1117,100 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0 6px' }}>
-              {metrikGabungan.map((m) => {
-                const Icon = m.Icon
-                return (
-                  <button
-                    key={m.key}
-                    onClick={() => setGrafik(m.key)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 5,
-                      fontSize: 11, padding: '4px 11px 4px 8px', borderRadius: 999, cursor: 'pointer',
-                      border: `1px solid ${grafik === m.key ? '#fff' : 'rgba(255,255,255,0.3)'}`,
-                      background: grafik === m.key ? 'rgba(255,255,255,0.15)' : 'transparent',
-                      color: '#fff',
-                    }}
-                  >
-                    <Icon size={13} />
-                    {m.label}
-                  </button>
-                )
-              })}
-            </div>
+            {!modeSemua ? (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0 6px' }}>
+                {metrikGabungan.map((m) => {
+                  const Icon = m.Icon
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => setGrafik(m.key)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        fontSize: 11, padding: '4px 11px 4px 8px', borderRadius: 999, cursor: 'pointer',
+                        border: `1px solid ${grafik === m.key ? '#fff' : 'rgba(255,255,255,0.3)'}`,
+                        background: grafik === m.key ? 'rgba(255,255,255,0.15)' : 'transparent',
+                        color: '#fff',
+                      }}
+                    >
+                      <Icon size={13} />
+                      {m.label}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '12px 0 6px' }}>
+                {metrikGabungan.map((m) => {
+                  const Icon = m.Icon
+                  const aktifDipilih = metrikDipilih.has(m.key)
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => toggleMetrikDipilih(m.key)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 5,
+                        fontSize: 11, padding: '4px 11px 4px 8px', borderRadius: 999, cursor: 'pointer',
+                        border: `1px solid ${aktifDipilih ? m.warna : 'rgba(255,255,255,0.25)'}`,
+                        background: aktifDipilih ? `${m.warna}33` : 'transparent',
+                        color: aktifDipilih ? '#fff' : 'rgba(255,255,255,0.5)',
+                      }}
+                    >
+                      <span style={{ width: 8, height: 8, borderRadius: 999, background: m.warna, flexShrink: 0, opacity: aktifDipilih ? 1 : 0.4 }} />
+                      <Icon size={13} />
+                      {m.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', margin: '4px 0 8px', fontSize: 11 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <GitCompare size={12} />
-                Bandingkan:
-                <select
-                  value={pembanding}
-                  onChange={(e) => setPembanding(e.target.value)}
-                  style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, fontSize: 11, padding: '2px 6px' }}
-                >
-                  <option value="" style={{ color: '#000' }}>Tanpa perbandingan</option>
-                  {metrikGabungan.filter((m) => m.key !== grafik).map((m) => (
-                    <option key={m.key} value={m.key} style={{ color: '#000' }}>{m.label}</option>
-                  ))}
-                </select>
-              </label>
-              {rentang === '24h' && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={tampilkanKemarin} onChange={(e) => setTampilkanKemarin(e.target.checked)} />
-                  vs kemarin
-                </label>
+              {!modeSemua && (
+                <>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <GitCompare size={12} />
+                    Bandingkan:
+                    <select
+                      value={pembanding}
+                      onChange={(e) => setPembanding(e.target.value)}
+                      style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 6, fontSize: 11, padding: '2px 6px' }}
+                    >
+                      <option value="" style={{ color: '#000' }}>Tanpa perbandingan</option>
+                      {metrikGabungan.filter((m) => m.key !== grafik).map((m) => (
+                        <option key={m.key} value={m.key} style={{ color: '#000' }}>{m.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {rentang === '24h' && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={tampilkanKemarin} onChange={(e) => setTampilkanKemarin(e.target.checked)} />
+                      vs kemarin
+                    </label>
+                  )}
+                </>
+              )}
+              {modeSemua && (
+                <span style={{ opacity: 0.7 }}>Klik tombol sensor di atas untuk sembunyikan/tampilkan garisnya. Nilai dinormalisasi (0-1) supaya bisa dibandingkan bentuk trennya.</span>
               )}
             </div>
 
             <div ref={grafikRef} style={{ height: 240, marginTop: 8 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dataUntukChart} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
+                <LineChart data={modeSemua ? dataSemuaNormal : dataUntukChart} margin={{ top: 8, right: 8, bottom: 0, left: -20 }}>
                   <CartesianGrid stroke="rgba(255,255,255,0.1)" vertical={false} />
                   <XAxis dataKey="bucket" tickFormatter={jamLabel} tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} minTickGap={40} />
-                  <YAxis yAxisId="kiri" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} domain={['auto', 'auto']} />
-                  {pembanding && (
+                  <YAxis yAxisId="kiri" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} domain={modeSemua ? [0, 1] : ['auto', 'auto']} hide={modeSemua} />
+                  {!modeSemua && pembanding && (
                     <YAxis yAxisId="kanan" orientation="right" tick={{ fontSize: 11, fill: 'rgba(255,255,255,0.6)' }} domain={['auto', 'auto']} />
                   )}
                   <Tooltip
                     labelFormatter={(v) => jamLabel(v as string)}
                     formatter={(v: number, nama: string) => {
+                      if (modeSemua) {
+                        const m = cariMetrik(nama)
+                        return [`${v?.toFixed?.(m.desimal) ?? v} ${m.satuan}`, m.label]
+                      }
                       if (nama === 'prediksi') return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, `${aktif.label} (prediksi)`]
                       if (nama === 'kemarinNilai') return [`${v?.toFixed?.(aktif.desimal) ?? v} ${aktif.satuan}`, `${aktif.label} (kemarin)`]
                       if (nama === pembanding) {
@@ -1165,13 +1221,21 @@ export default function Dashboard() {
                     }}
                     contentStyle={{ background: '#052e21', border: 'none', borderRadius: 8, fontSize: 12 }}
                   />
-                  <Line yAxisId="kiri" type="monotone" dataKey={grafik} stroke="#34d399" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
-                  <Line yAxisId="kiri" type="monotone" dataKey="prediksi" stroke="#facc15" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls isAnimationActive={false} />
-                  {tampilkanKemarin && (
-                    <Line yAxisId="kiri" type="monotone" dataKey="kemarinNilai" stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="2 4" dot={false} connectNulls isAnimationActive={false} />
-                  )}
-                  {pembanding && (
-                    <Line yAxisId="kanan" type="monotone" dataKey={pembanding} stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                  {modeSemua ? (
+                    metrikGabungan.filter((m) => metrikDipilih.has(m.key)).map((m) => (
+                      <Line key={m.key} yAxisId="kiri" type="monotone" dataKey={m.key} stroke={m.warna} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                    ))
+                  ) : (
+                    <>
+                      <Line yAxisId="kiri" type="monotone" dataKey={grafik} stroke="#34d399" strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
+                      <Line yAxisId="kiri" type="monotone" dataKey="prediksi" stroke="#facc15" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls isAnimationActive={false} />
+                      {tampilkanKemarin && (
+                        <Line yAxisId="kiri" type="monotone" dataKey="kemarinNilai" stroke="#9ca3af" strokeWidth={1.5} strokeDasharray="2 4" dot={false} connectNulls isAnimationActive={false} />
+                      )}
+                      {pembanding && (
+                        <Line yAxisId="kanan" type="monotone" dataKey={pembanding} stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+                      )}
+                    </>
                   )}
                 </LineChart>
               </ResponsiveContainer>
@@ -1179,9 +1243,11 @@ export default function Dashboard() {
             {data.length === 0 && (
               <p style={{ fontSize: 12, opacity: 0.6, textAlign: 'center', marginTop: 8 }}>Belum ada data untuk rentang ini.</p>
             )}
-            <p style={{ fontSize: 10, opacity: 0.55, marginTop: 6 }}>
-              Kuning putus-putus: prediksi tren linear sederhana (bukan AI/ML). Abu-abu putus-putus: data kemarin di jam yang sama. Biru: metrik pembanding (sumbu kanan).
-            </p>
+            {!modeSemua && (
+              <p style={{ fontSize: 10, opacity: 0.55, marginTop: 6 }}>
+                Kuning putus-putus: prediksi tren linear sederhana (bukan AI/ML). Abu-abu putus-putus: data kemarin di jam yang sama. Biru: metrik pembanding (sumbu kanan).
+              </p>
+            )}
           </div>
 
           <div style={{ borderRadius: 20, padding: 'clamp(1.25rem, 2vw, 1.75rem)', background: '#eef2ff', border: '1px solid #c7d2fe' }}>
