@@ -10,7 +10,7 @@ import {
   Thermometer, FlaskConical, Droplets, Waves, Wind, Sun, Moon,
   MapPin, Sparkles, ExternalLink, Wifi, WifiOff, AlertTriangle, Download, Gauge,
   GitCompare, History, Settings, Copy, X, FileText, Maximize, Minimize,
-  ImageDown, CloudSun, Clock3, SignalHigh, SignalMedium, SignalLow,
+  ImageDown, CloudSun, Clock3, SignalHigh, SignalMedium, SignalLow, Database,
 } from 'lucide-react'
 
 const supabase = createClient(
@@ -187,6 +187,7 @@ export default function Dashboard() {
   const [logPengaturan, setLogPengaturan] = useState<{ waktu: string; label: string; lama: number; baru: number }[]>([])
   const [modeKios, setModeKios] = useState(false)
   const [cuacaLuar, setCuacaLuar] = useState<{ suhu: number | null; kelembaban: number | null } | null>(null)
+  const [statusDB, setStatusDB] = useState<{ mb_terpakai: number; persen: number; ambang: number; backup_terakhir: { nama: string; waktu: string } | null } | null>(null)
   const grafikRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -517,6 +518,17 @@ export default function Dashboard() {
     }
   }
 
+  async function muatStatusDB() {
+    try {
+      const res = await fetch('/api/status-database')
+      const json = await res.json()
+      if (json.error) { setStatusDB(null); return }
+      setStatusDB(json)
+    } catch {
+      setStatusDB(null)
+    }
+  }
+
   function toggleModeKios() {
     setModeKios((v) => {
       const baru = !v
@@ -535,6 +547,12 @@ export default function Dashboard() {
   useEffect(() => {
     muatCuaca()
     const iv = setInterval(muatCuaca, 15 * 60 * 1000)
+    return () => clearInterval(iv)
+  }, [])
+
+  useEffect(() => {
+    muatStatusDB()
+    const iv = setInterval(muatStatusDB, 5 * 60 * 1000)
     return () => clearInterval(iv)
   }, [])
 
@@ -1342,6 +1360,38 @@ export default function Dashboard() {
             <p style={{ fontSize: 12, color: t.sub, marginTop: 8 }}>Belum cukup data untuk peta kalender.</p>
           )}
         </section>
+
+        {/* Status database & backup */}
+        {statusDB && (() => {
+          const warnaBar = statusDB.persen >= statusDB.ambang ? '#ef4444' : statusDB.persen >= 60 ? '#f59e0b' : '#22c55e'
+          return (
+            <section style={{ borderRadius: 20, background: t.card, border: `1px solid ${t.border}`, padding: '1.25rem 1.5rem', marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <Database size={16} color={dark ? '#e5e7eb' : '#14532d'} />
+                <span style={{ fontSize: 15, fontWeight: 600, color: dark ? '#e5e7eb' : '#14532d' }}>Status Database &amp; Backup</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: t.sub, marginBottom: 4 }}>
+                <span>Pemakaian database</span>
+                <span style={{ fontWeight: 600, color: warnaBar }}>
+                  {statusDB.mb_terpakai} MB / 500 MB &nbsp;({statusDB.persen}% dari batas {statusDB.ambang}%)
+                </span>
+              </div>
+              <div style={{ width: '100%', height: 8, borderRadius: 999, background: dark ? '#1f2b25' : '#f3f4f6', overflow: 'hidden', marginBottom: 12 }}>
+                <div style={{ width: `${Math.min(100, statusDB.persen)}%`, height: '100%', background: warnaBar, borderRadius: 999 }} />
+              </div>
+              <div style={{ fontSize: 12, color: t.sub }}>
+                {statusDB.backup_terakhir
+                  ? <>Backup terakhir: <strong style={{ color: t.text }}>
+                      {new Date(statusDB.backup_terakhir.waktu).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </strong></>
+                  : 'Belum pernah ada backup otomatis.'}
+              </div>
+              <p style={{ fontSize: 10, color: t.sub, marginTop: 8 }}>
+                Arsip otomatis jalan tiap hari, hanya memproses data kalau database sudah mencapai {statusDB.ambang}%.
+              </p>
+            </section>
+          )
+        })()}
 
         {/* Cuaca luar vs greenhouse */}
         {cuacaLuar && (
