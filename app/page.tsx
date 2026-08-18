@@ -73,6 +73,20 @@ function fmt(v: number | null | undefined, desimal: number) {
   return v == null ? '—' : v.toFixed(desimal)
 }
 
+function animasiIkon(key: string): string {
+  switch (key) {
+    case 'suhu_air':   return 'anim-termo'
+    case 'ph':         return 'anim-flask'
+    case 'tds':        return 'anim-drop'
+    case 'jarak':      return 'anim-wave'
+    case 'suhu_udara': return 'anim-wind'
+    case 'hum_udara':  return 'anim-drop'
+    case 'lux':        return 'anim-sun'
+    case 'vpd':        return 'anim-gauge'
+    default:           return ''
+  }
+}
+
 function kekuatanSinyal(rssi: number | null | undefined) {
   if (rssi == null) return null
   if (rssi >= -60) return { label: 'Kuat', warna: '#a3e635', Icon: SignalHigh }
@@ -857,7 +871,7 @@ export default function Dashboard() {
                     background: anomali ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.15)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}>
-                    <Icon size={20} color={anomali ? '#fecaca' : '#fff'} />
+                    <Icon size={20} color={anomali ? '#fecaca' : '#fff'} className={animasiIkon(m.key)} />
                   </div>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
@@ -902,7 +916,7 @@ export default function Dashboard() {
                 background: anomaliVPD ? 'rgba(248,113,113,0.3)' : 'rgba(255,255,255,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
               }}>
-                <Gauge size={20} color={anomaliVPD ? '#fecaca' : '#fff'} />
+                <Gauge size={20} color={anomaliVPD ? '#fecaca' : '#fff'} className="anim-gauge" />
               </div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 2, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
@@ -1480,6 +1494,69 @@ export default function Dashboard() {
         :global(.pulsing) {
           animation: pulseSkeleton 1.4s ease-in-out infinite;
         }
+
+        @keyframes animPulseTermo {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.18); }
+        }
+        :global(.anim-termo) {
+          animation: animPulseTermo 2s ease-in-out infinite;
+          transform-origin: center;
+        }
+
+        @keyframes animWobbleFlask {
+          0%, 100% { transform: rotate(-9deg); }
+          50% { transform: rotate(9deg); }
+        }
+        :global(.anim-flask) {
+          animation: animWobbleFlask 2.6s ease-in-out infinite;
+          transform-origin: bottom center;
+        }
+
+        @keyframes animBounceDrop {
+          0%, 100% { transform: translateY(0); }
+          30% { transform: translateY(-3px); }
+          60% { transform: translateY(1px); }
+        }
+        :global(.anim-drop) {
+          animation: animBounceDrop 1.8s ease-in-out infinite;
+        }
+
+        @keyframes animSwayWave {
+          0%, 100% { transform: translateX(-2px); }
+          50% { transform: translateX(2px); }
+        }
+        :global(.anim-wave) {
+          animation: animSwayWave 2.4s ease-in-out infinite;
+        }
+
+        @keyframes animBlowWind {
+          0%, 100% { transform: translateX(0) rotate(0deg); }
+          50% { transform: translateX(2px) rotate(8deg); }
+        }
+        :global(.anim-wind) {
+          animation: animBlowWind 2.1s ease-in-out infinite;
+          transform-origin: center;
+        }
+
+        @keyframes animSpinSun {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        :global(.anim-sun) {
+          animation: animSpinSun 9s linear infinite;
+          transform-origin: center;
+        }
+
+        @keyframes animTickGauge {
+          0%, 100% { transform: rotate(-14deg); }
+          50% { transform: rotate(14deg); }
+        }
+        :global(.anim-gauge) {
+          animation: animTickGauge 2.2s ease-in-out infinite;
+          transform-origin: bottom center;
+        }
+
         @media (max-width: 768px) {
           .chart-alert-grid {
             grid-template-columns: 1fr !important;
