@@ -8,7 +8,7 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const AMBANG_PERSEN = 80
+const AMBANG_PERSEN = 50
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
