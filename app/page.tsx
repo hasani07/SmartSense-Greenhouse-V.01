@@ -533,7 +533,7 @@ export default function Dashboard() {
 
   async function muatCuaca() {
     try {
-      const res = await fetch('/api/cuaca')
+      const res = await fetch('/api/cuaca', { cache: 'no-store' })
       const json = await res.json()
       if (json.error) { setCuacaLuar(null); return }
       setCuacaLuar({ suhu: json.suhu, kelembaban: json.kelembaban })
@@ -544,7 +544,7 @@ export default function Dashboard() {
 
   async function muatStatusDB() {
     try {
-      const res = await fetch('/api/status-database')
+      const res = await fetch('/api/status-database', { cache: 'no-store' })
       const json = await res.json()
       if (json.error) { setStatusDB(null); return }
       setStatusDB(json)
@@ -570,7 +570,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     muatCuaca()
-    const iv = setInterval(muatCuaca, 15 * 60 * 1000)
+    const iv = setInterval(muatCuaca, 5 * 60 * 1000)
     return () => clearInterval(iv)
   }, [])
 
