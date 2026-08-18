@@ -30,7 +30,8 @@ Tulis dengan gaya laporan teknis netral, sebutkan kondisi yang stabil dan yang p
         model: 'openai/gpt-oss-20b',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.4,
-        max_tokens: 400,
+        max_tokens: 700,
+        reasoning_effort: 'low',
       }),
       cache: 'no-store',
     })
