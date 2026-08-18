@@ -52,7 +52,8 @@ Kalau semua nilai ada dalam rentang ideal yang diberikan, katakan kondisi baik d
         model: 'openai/gpt-oss-20b',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.4,
-        max_tokens: 500,
+        max_tokens: 700,
+        reasoning_effort: 'low',
       }),
       cache: 'no-store',
     })
