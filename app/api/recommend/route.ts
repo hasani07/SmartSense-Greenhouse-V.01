@@ -23,9 +23,12 @@ export async function POST(req: Request) {
     return r ? `${r[0]} - ${r[1]}` : 'tidak ditentukan'
   }
 
-  const prompt = `Kamu asisten monitoring greenhouse akuaponik/hidroponik. Berdasarkan data sensor DAN rentang ideal yang SUDAH DITENTUKAN PENGGUNA di bawah ini, beri 2-3 rekomendasi singkat dan actionable dalam bahasa Indonesia, format list bernomor, tanpa basa-basi.
+  const prompt = `Kamu asisten monitoring greenhouse akuaponik/hidroponik. Berdasarkan data sensor DAN rentang ideal yang SUDAH DITENTUKAN PENGGUNA di bawah ini, beri MAKSIMAL 3 rekomendasi paling prioritas dalam bahasa Indonesia, format list bernomor, singkat dan actionable (1-2 kalimat per poin), tanpa basa-basi.
 
-PENTING: nilai "rentang ideal" di bawah adalah acuan RESMI yang harus kamu pakai untuk menilai normal/tidaknya suatu sensor -- JANGAN pakai asumsi umummu sendiri soal sayuran/tanaman pada umumnya, walaupun asumsimu berbeda dari rentang ini.
+PENTING:
+- Nilai "rentang ideal" di bawah adalah acuan RESMI yang harus kamu pakai untuk menilai normal/tidaknya suatu sensor -- JANGAN pakai asumsi umummu sendiri soal sayuran/tanaman pada umumnya, walaupun asumsimu berbeda dari rentang ini.
+- STRICT: maksimal 3 poin. Kalau lebih dari 3 sensor bermasalah, pilih 3 yang paling mendesak saja, jangan sebutkan semuanya.
+- Setiap poin harus selesai dalam 1-2 kalimat, jangan bertele-tele.
 
 Suhu air: ${suhu_air} C (rentang ideal: ${fmtRentang('suhu_air')})
 pH: ${ph} (rentang ideal: ${fmtRentang('ph')})
@@ -49,7 +52,7 @@ Kalau semua nilai ada dalam rentang ideal yang diberikan, katakan kondisi baik d
         model: 'llama-3.1-8b-instant',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.4,
-        max_tokens: 300,
+        max_tokens: 500,
       }),
       cache: 'no-store',
     })
